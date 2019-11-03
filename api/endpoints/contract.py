@@ -95,7 +95,7 @@ class Application():
 
             # w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
             w3.eth.defaultAccount = self.owner_account
-            bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+            bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
 
             print("Adding as minter to contract address {0}".format(self.contract_address))
             print("Code at contract address {0} is {1}".format(self.contract_address, w3.eth.getCode(self.contract_address)))
@@ -129,7 +129,7 @@ class CreateApplication(Resource):
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         w3.eth.defaultAccount = w3.eth.accounts[0]
 
-        bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
 
         print("Bytecode {0}".format(bytecode))
         RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
@@ -194,7 +194,7 @@ class ListParties(Resource):
 
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
 
-        bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
         print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
@@ -246,7 +246,7 @@ class CreatePlasticCoin(Resource):
         contract_address = app.contract_address
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         w3.eth.defaultAccount = minter_address
-        bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
         print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
@@ -290,7 +290,7 @@ class PlasticCoin(Resource):
 
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         w3.eth.defaultAccount = collector_address
-        bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
         print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
@@ -328,7 +328,7 @@ class PlasticCoin(Resource):
 
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         w3.eth.defaultAccount = party_address
-        bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
         print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
@@ -359,7 +359,7 @@ class TotalPlasticCoins(Resource):
         w3.eth.defaultAccount = w3.eth.accounts[0]
 
 
-        bytecode, abi = compile_contract(['junk.sol', 'Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
         print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
