@@ -52,9 +52,11 @@ def initialize_app(flask_app):
 
 
 def main():
+    import sys
+    port = int(sys.argv[1])
     initialize_app(app)
     # log.info('>>>>> Starting development server at http://{}/api/ <<<<<'.format(app.config['SERVER_NAME']))
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 if __name__ == "__main__":
