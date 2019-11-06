@@ -14,7 +14,10 @@ from flask_restplus import reqparse
 # from rest_api_demo.database.models import Post
 
 # log = logging.getLogger(__name__)
-ns = api.namespace('plastic_coin', description='Operations related to the PlasticCoin')
+ns = api.namespace('plastic_coin', description='Admin operations related to the PlasticCoin')
+ps = api.namespace('processor', description='Operations available to processor')
+cs = api.namespace('collector', description='Operations available to collector')
+ds = api.namespace('donor', description='Operations available to donor')
 
 application_instance = {
 
@@ -213,7 +216,7 @@ mint_request.add_argument('processor', required=True, default=1, help='Processor
 mint_request.add_argument('collector', required=True, default=1, help='Collector', location='args')
 mint_request.add_argument('amount', required=True, default=1, type=int, help='Amount of plastic coins', location='args')
 
-@ns.route('/create_plastic_coin')
+@ps.route('/create_plastic_coin')
 class CreatePlasticCoin(Resource):
 
     # @api.expect(pagination_arguments)
@@ -264,7 +267,7 @@ redeem_plastic_coins_request.add_argument('collector', required=True, default=1,
 redeem_plastic_coins_request.add_argument('donor', required=True, default=1, help='Donor', location='args')
 redeem_plastic_coins_request.add_argument('amount', required=True, default=1, help='Number of plastic coins', location='args')
 
-@ns.route('/redeem_plastic_coins')
+@cs.route('/redeem_plastic_coins')
 class PlasticCoin(Resource):
 
     @api.expect(redeem_plastic_coins_request)
@@ -304,7 +307,40 @@ get_balance_request.add_argument('your_name', required=True,
     help='Your instance so that you don\'t mess anyone else instance', location='args')
 get_balance_request.add_argument('party_name', required=True, default=1, help='Name of party', location='args')
 
-@ns.route('/get_plastic_coin_balance')
+@ds.route('/get_plastic_coin_balance')
+class PlasticCoinDonor(Resource):
+
+    @api.expect(get_balance_request)
+    def get(self):
+        global application_instance
+        args = get_balance_request.parse_args(request)
+        your_name = args.get('your_name')
+        party_name = args.get('party_name')
+
+        if your_name not in application_instance:
+            raise BadRequest("No instance exists for {0}".format(your_name))
+
+        app = application_instance[your_name]
+
+        if party_name not in app.user_map:
+            raise BadRequest("No party with name {0}".format(party_name))
+        
+        party_address = app.user_map[party_name]["address"]
+
+        contract_address = app.contract_address
+
+        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        w3.eth.defaultAccount = party_address
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        print("Using contract address {0}".format(contract_address))
+        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+
+        balance = RecycleContract.functions.balanceOf(party_address).call()
+        print("Balance of {0} is {1}".format(party_address, balance))
+
+        return balance
+
+@cs.route('/get_plastic_coin_balance')
 class PlasticCoin(Resource):
 
     @api.expect(get_balance_request)
