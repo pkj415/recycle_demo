@@ -3,29 +3,25 @@ from solc import compile_standard
 import json
 from web3 import Web3
 
-from flask import request
+from flask import Flask, request, Response
 from werkzeug.exceptions import BadRequest
-from flask_restplus import Resource
-# from rest_api_demo.api.blog.business import create_blog_post, update_post, delete_post
-# from rest_api_demo.api.blog.serializers import blog_post, page_of_blog_posts
-# from rest_api_demo.api.blog.parsers import pagination_arguments
+from flask_restplus import Resource, fields
 from ..restplus import api
 from flask_restplus import reqparse
 # from rest_api_demo.database.models import Post
 
 # log = logging.getLogger(__name__)
-ns = api.namespace('plastic_coin', description='Admin operations related to the PlasticCoin')
+app = Flask(__name__)
+plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
+transaction = api.namespace('transaction', description='Monitor transactions')
+ns = plastic_coin
 ps = api.namespace('processor', description='Operations available to processor')
 cs = api.namespace('collector', description='Operations available to collector')
 ds = api.namespace('donor', description='Operations available to donor')
 
-application_instance = {
-
-}
-
 create_application_instance = reqparse.RequestParser()
 create_application_instance.add_argument('your_name', required=True,
-    help='Your instance so that you don\'t mess anyone else instance', location='args')
+    help='Your instance so that you don\'t mess anyone else\'s instance', location='args')
 
 class Application():
     def __init__(self):
@@ -101,7 +97,7 @@ class Application():
             bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
 
             print("Adding as minter to contract address {0}".format(self.contract_address))
-            print("Code at contract address {0} is {1}".format(self.contract_address, w3.eth.getCode(self.contract_address)))
+            # print("Code at contract address {0} is {1}".format(self.contract_address, w3.eth.getCode(self.contract_address)))
             RecycleContract = w3.eth.contract(address=self.contract_address, abi=abi, bytecode=bytecode)
 
             tx_hash = RecycleContract.functions.addMinter(processor_address).transact()
@@ -209,19 +205,70 @@ class ListParties(Resource):
 
         return res
 
-mint_request = reqparse.RequestParser()
-mint_request.add_argument('your_name', required=True,
-    help='Your instance so that you don\'t mess anyone else instance', location='args')
-mint_request.add_argument('processor', required=True, default=1, help='Processor', location='args')
-mint_request.add_argument('collector', required=True, default=1, help='Collector', location='args')
-mint_request.add_argument('amount', required=True, default=1, type=int, help='Amount of plastic coins', location='args')
+# mint_request = reqparse.RequestParser()
+# mint_request.add_argument('your_name', required=True,
+#     help='Your instance so that you don\'t mess anyone else instance', location='args')
+# mint_request.add_argument('processor', required=True, default="Ambuja", help='Processor', location='args')
+# mint_request.add_argument('collector', required=True, default="Saahas", help='Collector', location='args')
+# mint_request.add_argument('amount', required=True, default=1, type=int, help='Amount of plastic coins', location='args')
+# mint_request.add_argument('physical_certificate', required=True, default=1, type=int, help='Need to figure out how the reference to the certificate will be pased', location='args')
 
-@ps.route('/create_plastic_coin')
+mint_request = api.model('mint_request', {
+    'your_name': fields.String(required=True, description='Your instance so that you don\'t mess anyone else instance'),
+    'processor': fields.String(required=True, default="Ambuja", description='Processor'),
+    'collector': fields.String(required=True, default="Saahas", description='Collector'),
+    'amount': fields.Integer(required=True, default=1, type=int, description='Amount of plastic coins'),
+    'physical_certificate': fields.String(required=True, default=1, type=int, description='Need to figure out how the reference to the certificate will be pased')
+})
+
+@plastic_coin.route('')
 class CreatePlasticCoin(Resource):
-
-    # @api.expect(pagination_arguments)
-    # @api.marshal_with(page_of_blog_posts)
     @api.expect(mint_request)
+    def post(self):
+        global application_instance
+        your_name = request.json.get('your_name')
+        processor = request.json.get('processor')
+        collector = request.json.get('collector')
+        amount = request.json.get('amount')
+
+        if your_name not in application_instance:
+            raise BadRequest("No instance exists for {0}".format(your_name))
+
+        app = application_instance[your_name]
+
+        app.validate_party(processor, "Processor")
+        app.validate_party(collector, "Collector")
+        
+        processor_address = app.user_map[processor]["address"]
+        collector_address = app.user_map[collector]["address"]
+
+        user_address = collector_address
+        minter_address = processor_address
+        print("user address {0}".format(user_address))
+        print("amount {0}".format(amount))
+
+        contract_address = app.contract_address
+        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        w3.eth.defaultAccount = minter_address
+        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        print("Using contract address {0}".format(contract_address))
+        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+
+        tx_hash = RecycleContract.functions.mint(user_address, amount).transact()
+
+        print("Create plastic coin {0}. TX hash {1}".format(request, tx_hash))
+        resp = Response(
+            json.dumps({"tx_hash": tx_hash.hex()}),
+            status=200, mimetype='application/json')
+
+        return resp
+        # tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
+        # print(tx_receipt)
+
+        return {"transaction_hash": tx_hash}
+
+@transaction.route('/<tx_hash>')
+class Transaction(Resource):
     def post(self):
         global application_instance
         args = mint_request.parse_args(request)
@@ -255,10 +302,16 @@ class CreatePlasticCoin(Resource):
 
         tx_hash = RecycleContract.functions.mint(user_address, amount).transact()
 
-        tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
-        print(tx_receipt)
+        print("Create plastic coin {0}. TX hash {1}".format(request, tx_hash))
+        resp = Response(
+            json.dumps({"tx_hash": tx_hash.hex()}),
+            status=200, mimetype='application/json')
 
-        return 0
+        return resp
+        # tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
+        # print(tx_receipt)
+
+        return {"transaction_hash": tx_hash}
 
 redeem_plastic_coins_request = reqparse.RequestParser()
 redeem_plastic_coins_request.add_argument('your_name', required=True,
@@ -438,3 +491,28 @@ def compile_contract(contract_source_files, contractFileName, contractName=None)
     bytecode = compiled_sol['contracts'][contractFileName][contractName]['evm']['bytecode']['object']
     abi = json.loads(compiled_sol['contracts'][contractFileName][contractName]['metadata'])['output']['abi']
     return bytecode, abi
+
+dummy_app = Application()
+w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+w3.eth.defaultAccount = w3.eth.accounts[0]
+
+bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+
+RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
+
+tx_hash = RecycleContract.constructor().transact()
+
+tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
+contract_address = tx_receipt.contractAddress
+
+dummy_app.contract_address = contract_address
+dummy_app.add_party("Ambuja", "Processor")
+dummy_app.add_party("Reliance", "Processor")
+dummy_app.add_party("Saahas", "Collector")
+dummy_app.add_party("WVI", "Collector")
+dummy_app.add_party("Arun", "Donor")
+dummy_app.add_party("Varun", "Donor")
+
+application_instance = {
+    "Piyush" : dummy_app
+}
