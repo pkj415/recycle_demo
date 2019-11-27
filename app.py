@@ -483,7 +483,7 @@ def main():
     w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
     w3.eth.defaultAccount = w3.eth.accounts[0]
 
-    bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+    bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
 
     RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
 
@@ -493,12 +493,12 @@ def main():
     contract_address = tx_receipt.contractAddress
 
     dummy_app.contract_address = contract_address
-    dummy_app.add_party("Ambuja", "Processor")
-    dummy_app.add_party("Reliance", "Processor")
-    dummy_app.add_party("Saahas", "Collector")
-    dummy_app.add_party("WVI", "Collector")
-    dummy_app.add_party("Arun", "Donor")
-    dummy_app.add_party("Varun", "Donor")
+    # dummy_app.add_party("Ambuja", "Processor")
+    # dummy_app.add_party("Reliance", "Processor")
+    # dummy_app.add_party("Saahas", "Collector")
+    # dummy_app.add_party("WVI", "Collector")
+    # dummy_app.add_party("Arun", "Donor")
+    # dummy_app.add_party("Varun", "Donor")
 
     global application_instance
     application_instance.update({
