@@ -1,8 +1,10 @@
 from flask import Flask, request, Response
 from flask_restplus import Resource, fields, reqparse, Api
 import logging
+import requests
 from solc import compile_standard
 import json
+import sha3
 from web3 import Web3
 from werkzeug.exceptions import BadRequest
 
@@ -17,8 +19,8 @@ plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
 transaction = api.namespace('transaction', description='Monitor transactions')
 user = api.namespace('user', description='User management')
 ps = api.namespace('processor', description='Operations available to processor')
-cs = api.namespace('collector', description='Operations available to collector')
-ds = api.namespace('donor', description='Operations available to donor')
+# cs = api.namespace('collector', description='Operations available to collector')
+# ds = api.namespace('donor', description='Operations available to donor')
 
 create_application_instance = reqparse.RequestParser()
 create_application_instance.add_argument('admin_name', required=True, default="Piyush",
@@ -26,21 +28,26 @@ create_application_instance.add_argument('admin_name', required=True, default="P
 
 application_instance = {}
 
+def get_token_id(token_uri):
+    return int.from_bytes(sha3.keccak_256(token_uri.encode('utf-8')).digest(), byteorder="big", signed=False)
+
 class Application():
     def __init__(self):
         self.user_map = {}
+        self.address_user_map = {}
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         self.owner_account = w3.eth.accounts[0]
         self.contract_address = ""
 
-    def create_account(self):
+    def create_account(self, password):
+        print("------------- Create account -------------")
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        address = w3.geth.personal.newAccount("this-phrase")
+        address = w3.geth.personal.newAccount(password)
         # Bug in ganache-cli, doesn't accept two arguments, duration=None also doesn't work
 
         print("Created address {0}".format(address))
         gasLimit = 3000000;
-        w3.geth.personal.unlockAccount(address, "this-phrase", None)
+        w3.geth.personal.unlockAccount(address, password, None)
         transaction = {
           "from": w3.eth.accounts[0],
           # "nonce": web3.toHex(1),
@@ -81,23 +88,26 @@ class Application():
 
         return address
 
-    def add_party(self, party_name, type):
+    def add_party(self, party_name, type, password):
+        print("------------- Create user -------------")
         if party_name in self.user_map:
             raise BadRequest("This party already exists")
 
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        address = self.create_account(password)
         self.user_map[party_name] = {
             "type": type,
-            "address": self.create_account()
+            "address": address
         }
 
+        self.address_user_map[address] = party_name
         if type == "Processor":
             processor_address = self.user_map[party_name]["address"]
             print("Processor address {0}".format(processor_address))
 
-            # w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
             w3.eth.defaultAccount = self.owner_account
-            bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+            bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
+            # bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
 
             print("Adding as minter to contract address {0}".format(self.contract_address))
             # print("Code at contract address {0} is {1}".format(self.contract_address, w3.eth.getCode(self.contract_address)))
@@ -173,30 +183,30 @@ class CreateUser(Resource):
         phone = request.json.get('phone')
         user_type = request.json.get('user_type')
 
-        print("Adding party {0}".format(request.json))
+        print("Adding user {0}".format(request.json))
 
         if admin_name not in application_instance:
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
-        app.add_party(email, user_type)
+        app.add_party(email, user_type, password)
 
-        esp = Response(
-            json.dumps({"public_key": app.user_map[email][address]}),
+        resp = Response(
+            json.dumps({"public_key": app.user_map[email]["address"]}),
             status=200, mimetype='application/json')
 
-list_parties_request = reqparse.RequestParser()
-list_parties_request.add_argument('admin_name', required=True, default="Piyush",
+list_users_request = reqparse.RequestParser()
+list_users_request.add_argument('admin_name', required=True, default="Piyush",
     help='Admin name', location='args')
 
-@user.route('/list_parties')
+@user.route('/list_users')
 class ListParties(Resource):
 
     # @api.marshal_with(page_of_blog_posts)
-    @api.expect(list_parties_request)
+    @api.expect(list_users_request)
     def post(self):
         global application_instance
-        args = list_parties_request.parse_args(request)
+        args = list_users_request.parse_args(request)
         admin_name = args.get('admin_name')
         
         if admin_name not in application_instance:
@@ -204,73 +214,162 @@ class ListParties(Resource):
 
         app = application_instance[admin_name]
         contract_address = app.contract_address
-        import copy
-        res = copy.deepcopy(app.user_map)
+
+        return app.user_map
+
+filter_tokens_request = api.model('filter_tokens_request', {
+    'admin_name': fields.String(required=True, description='Admin name', default="Piyush"),
+    'token_filter': fields.Nested(api.model('filter', {
+        'version': fields.Integer(required=False, default=1, description='Version of the URI'),
+        'recycler_address': fields.String(required=False, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Address of recycler'),
+    }))
+})
+
+@user.route('/<string:address>/filter_tokens')
+class FilterTokens(Resource):
+    @api.expect(filter_tokens_request)
+    def post(self, address):
+        global application_instance
+        print("------------- Filter Coins -------------")
+        # print("Params - {0}".format(request.json))
+        admin_name = request.json.get('admin_name')
+        token_filter = request.json.get('token_filter')
+
+        # TODO: Implement the token filters
+        
+        if admin_name not in application_instance:
+            raise BadRequest("No instance exists for {0}".format(admin_name))
+
+        app = application_instance[admin_name]
+        contract_address = app.contract_address
 
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
 
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
-        print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
-        for user in app.user_map:
-            balance = RecycleContract.functions.balanceOf(res[user]["address"]).call()
-            print("Balance of {0} is {1}".format(res[user]["address"], balance))
-            res[user]["balance"] = balance
+        token_ids = RecycleContract.functions.getOwnerTokens(address).call()
+        print("Token ids - {0}".format(token_ids))
 
-        return res
+        resp = []
+        for token_id in token_ids:
+            token_uri = RecycleContract.functions.tokenURI(token_id).call()
+            resp.append({
+                "token_uri": json.loads(token_uri),
+                "share": RecycleContract.functions.getTokenShare(token_id, address).call()
+            })
+
+            resp[-1]["token_uri"]["recycler"] = app.address_user_map[
+                resp[-1]["token_uri"]["recycler_address"]]
+
+
+        resp_json = json.dumps(resp)
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
 
 mint_request = api.model('mint_request', {
     'admin_name': fields.String(required=True, description='Admin name', default="Piyush"),
-    'processor': fields.String(required=True, default="Ambuja", description='Processor'),
-    'collector': fields.String(required=True, default="Saahas", description='Collector'),
-    'amount': fields.Integer(required=True, default=1, type=int, description='Amount of plastic coins'),
-    'physical_certificate': fields.String(required=True, default=1, type=int, description='Need to figure out how the reference to the certificate will be pased')
+    'processor_address': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Minter address'),
+    'collector_address': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Receiver address'),
+    'token_uri': fields.Nested(api.model('token_uri', {
+        'version': fields.Integer(required=True, default=1, description='Version of the URI'),
+        'physical_certificate_url': fields.String(required=True, default="aws/s3/abc", description='URL of physical certificate'),
+        'offset_amount': fields.Float(required=True, default=10.5, description='Weight of plastic offset'),
+        'recycler_address': fields.String(required=False, default="<will_be_auto_filled>", description='Recycler'),
+    }))
 })
 
 @plastic_coin.route('')
 class CreatePlasticCoin(Resource):
     @api.expect(mint_request)
     def post(self):
+        print("------------- Create Coin -------------")
+        print("Params - {0}".format(request.json))
         global application_instance
         admin_name = request.json.get('admin_name')
-        processor = request.json.get('processor')
-        collector = request.json.get('collector')
-        amount = request.json.get('amount')
+        processor_address = request.json.get('processor_address')
+        collector_address = request.json.get('collector_address')
+        token_uri = request.json.get('token_uri')
 
         if admin_name not in application_instance:
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
 
+        processor = app.address_user_map[processor_address]
+        collector = app.address_user_map[collector_address]
         app.validate_party(processor, "Processor")
         app.validate_party(collector, "Collector")
         
-        processor_address = app.user_map[processor]["address"]
-        collector_address = app.user_map[collector]["address"]
-
-        user_address = collector_address
-        minter_address = processor_address
-        print("user address {0}".format(user_address))
-        print("amount {0}".format(amount))
+        # processor_address = app.user_map[processor]["address"]
+        # collector_address = app.user_map[collector]["address"]
 
         contract_address = app.contract_address
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = minter_address
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
-        print("Using contract address {0}".format(contract_address))
+        w3.eth.defaultAccount = processor_address
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
+        # print("Using contract address {0}".format(contract_address))
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
-        tx_hash = RecycleContract.functions.mint(user_address, amount).transact()
+        token_uri['recycler_address'] = processor_address
+        token_uri = json.dumps(token_uri)
+        token_id = get_token_id(token_uri)
 
-        print("Create plastic coin {0}. TX hash {1}".format(request, tx_hash))
+        print("Token id - {0}".format(token_id))
+        tx_hash = RecycleContract.functions.mintWithTokenURI(collector_address, get_token_id(token_uri), token_uri).transact()
+
+        print("Tx hash {0}".format(tx_hash))
         resp = Response(
-            json.dumps({"tx_hash": tx_hash.hex()}),
+            json.dumps({"token_id": hex(token_id)}),
             status=200, mimetype='application/json')
 
         return resp
-        # tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
-        # print(tx_receipt)
+
+@plastic_coin.route('/<string:coin_id>')
+class GetPlasticCoin(Resource):
+    def get(self, coin_id):
+        print("------------- Get Coin -------------")
+        token_id = int(coin_id, 16)
+        print("Token id {0}".format(token_id))
+
+        app = application_instance["Piyush"]
+        contract_address = app.contract_address
+        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
+
+        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+
+        owner_addresses = RecycleContract.functions.getTokenOwners(token_id).call()
+        print("Owner addresses - {0}".format(owner_addresses))
+        token_uri = RecycleContract.functions.tokenURI(token_id).call()
+
+        resp = {
+                "owners": [
+                ],
+                "token_uri": json.loads(token_uri)
+            }
+
+        resp["token_uri"]["recycler"] = app.address_user_map[
+            resp["token_uri"]["recycler_address"]]
+
+        for owner_address in owner_addresses:
+            resp["owners"].append(
+                {
+                    "owner_address": owner_address,
+                    "email": app.address_user_map[owner_address],
+                    "share": RecycleContract.functions.getTokenShare(token_id, owner_address).call()
+                })
+
+
+        resp_json = json.dumps(resp)
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
 
 @transaction.route('/<tx_hash>')
 class Transaction(Resource):
@@ -289,20 +388,22 @@ class Transaction(Resource):
 
 send_tokens = api.model('send_tokens', {
     'admin_name': fields.String(required=True, description='Admin name', default="Piyush"),
-    'from_address': fields.String(required=True, default="Ambuja", description='Processor'),
-    'to_address': fields.String(required=True, default="Saahas", description='Collector'),
-    'amount': fields.Integer(required=True, default=5, description='Amount')
+    'from_address': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Sender address'),
+    'to_address': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Receiver address'),
+    'share': fields.Integer(required=True, default=5, description='Specify share out of 1000 units')
 })
 
-@plastic_coin.route('/<token_uuid>/send')
+@plastic_coin.route('/<string:coin_id>/send')
 class SendPlasticCoin(Resource):
     @api.expect(send_tokens)
-    def post(self, token_uuid):
+    def post(self, coin_id):
+        print("------------- Share Coin -------------")
+        token_id = int(coin_id, 16)
         global application_instance
         admin_name = request.json.get('admin_name')
         from_address = request.json.get('from_address')
         to_address = request.json.get('to_address')
-        amount = request.json.get('amount')
+        share = request.json.get('share')
 
         if admin_name not in application_instance:
             raise BadRequest("No instance exists for {0}".format(admin_name))
@@ -313,12 +414,12 @@ class SendPlasticCoin(Resource):
 
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         w3.eth.defaultAccount = from_address
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
-        print("Using contract address {0}".format(contract_address))
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
+
         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
-        print("Transferring {0} from {1} to {2}".format(amount, from_address, to_address))
-        tx_hash = RecycleContract.functions.transfer(to_address, int(amount)).transact()
+        # print("Transferring {0} from {1} to {2}".format(amount, from_address, to_address))
+        tx_hash = RecycleContract.functions.transferShareFrom(to_address, token_id, int(share)).transact()
 
         resp = Response(
             json.dumps({"tx_hash": tx_hash.hex()}),
@@ -331,104 +432,104 @@ get_balance_request.add_argument('admin_name', required=True, default="Piyush",
     help='Admin name', location='args')
 get_balance_request.add_argument('party_name', required=True, default=1, help='Name of party', location='args')
 
-@ds.route('/get_plastic_coin_balance')
-class PlasticCoinDonor(Resource):
+# @ds.route('/get_plastic_coin_balance')
+# class PlasticCoinDonor(Resource):
 
-    @api.expect(get_balance_request)
-    def get(self):
-        global application_instance
-        args = get_balance_request.parse_args(request)
-        admin_name = args.get('admin_name')
-        party_name = args.get('party_name')
+#     @api.expect(get_balance_request)
+#     def get(self):
+#         global application_instance
+#         args = get_balance_request.parse_args(request)
+#         admin_name = args.get('admin_name')
+#         party_name = args.get('party_name')
 
-        if admin_name not in application_instance:
-            raise BadRequest("No instance exists for {0}".format(admin_name))
+#         if admin_name not in application_instance:
+#             raise BadRequest("No instance exists for {0}".format(admin_name))
 
-        app = application_instance[admin_name]
+#         app = application_instance[admin_name]
 
-        if party_name not in app.user_map:
-            raise BadRequest("No party with name {0}".format(party_name))
+#         if party_name not in app.user_map:
+#             raise BadRequest("No party with name {0}".format(party_name))
         
-        party_address = app.user_map[party_name]["address"]
+#         party_address = app.user_map[party_name]["address"]
 
-        contract_address = app.contract_address
+#         contract_address = app.contract_address
 
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = party_address
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
-        print("Using contract address {0}".format(contract_address))
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+#         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+#         w3.eth.defaultAccount = party_address
+#         bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+#         print("Using contract address {0}".format(contract_address))
+#         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
-        balance = RecycleContract.functions.balanceOf(party_address).call()
-        print("Balance of {0} is {1}".format(party_address, balance))
+#         balance = RecycleContract.functions.balanceOf(party_address).call()
+#         print("Balance of {0} is {1}".format(party_address, balance))
 
-        return balance
+#         return balance
 
-@cs.route('/get_plastic_coin_balance')
-class PlasticCoin(Resource):
+# @cs.route('/get_plastic_coin_balance')
+# class PlasticCoin(Resource):
 
-    @api.expect(get_balance_request)
-    def get(self):
-        global application_instance
-        args = get_balance_request.parse_args(request)
-        admin_name = args.get('admin_name')
-        party_name = args.get('party_name')
+#     @api.expect(get_balance_request)
+#     def get(self):
+#         global application_instance
+#         args = get_balance_request.parse_args(request)
+#         admin_name = args.get('admin_name')
+#         party_name = args.get('party_name')
 
-        if admin_name not in application_instance:
-            raise BadRequest("No instance exists for {0}".format(admin_name))
+#         if admin_name not in application_instance:
+#             raise BadRequest("No instance exists for {0}".format(admin_name))
 
-        app = application_instance[admin_name]
+#         app = application_instance[admin_name]
 
-        if party_name not in app.user_map:
-            raise BadRequest("No party with name {0}".format(party_name))
+#         if party_name not in app.user_map:
+#             raise BadRequest("No party with name {0}".format(party_name))
         
-        party_address = app.user_map[party_name]["address"]
+#         party_address = app.user_map[party_name]["address"]
 
-        contract_address = app.contract_address
+#         contract_address = app.contract_address
 
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = party_address
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
-        print("Using contract address {0}".format(contract_address))
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+#         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+#         w3.eth.defaultAccount = party_address
+#         bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+#         print("Using contract address {0}".format(contract_address))
+#         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
-        balance = RecycleContract.functions.balanceOf(party_address).call()
-        print("Balance of {0} is {1}".format(party_address, balance))
+#         balance = RecycleContract.functions.balanceOf(party_address).call()
+#         print("Balance of {0} is {1}".format(party_address, balance))
 
-        return balance
+#         return balance
 
-total_plastic_coins_request = reqparse.RequestParser()
-total_plastic_coins_request.add_argument('admin_name', required=True, default="Piyush",
-    help='Admin name', location='args')
+# total_plastic_coins_request = reqparse.RequestParser()
+# total_plastic_coins_request.add_argument('admin_name', required=True, default="Piyush",
+#     help='Admin name', location='args')
 
-@user.route('/total_plastic_coins')
-class TotalPlasticCoins(Resource):
+# @user.route('/total_plastic_coins')
+# class TotalPlasticCoins(Resource):
 
-    @api.expect(total_plastic_coins_request)
-    def get(self):
-        global application_instance
-        args = total_plastic_coins_request.parse_args(request)
-        admin_name = args.get('admin_name')
-        if admin_name not in application_instance:
-            raise BadRequest("No instance exists for {0}".format(admin_name))
+#     @api.expect(total_plastic_coins_request)
+#     def get(self):
+#         global application_instance
+#         args = total_plastic_coins_request.parse_args(request)
+#         admin_name = args.get('admin_name')
+#         if admin_name not in application_instance:
+#             raise BadRequest("No instance exists for {0}".format(admin_name))
 
-        app = application_instance[admin_name]
-        contract_address = app.contract_address
+#         app = application_instance[admin_name]
+#         contract_address = app.contract_address
 
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = w3.eth.accounts[0]
+#         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+#         w3.eth.defaultAccount = w3.eth.accounts[0]
 
 
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
-        print("Using contract address {0}".format(contract_address))
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+#         bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+#         print("Using contract address {0}".format(contract_address))
+#         RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
-        print("Code at contract address {0} is {1}".format(contract_address, w3.eth.getCode(contract_address)))
+#         print("Code at contract address {0} is {1}".format(contract_address, w3.eth.getCode(contract_address)))
 
-        totalSupply = RecycleContract.functions.totalSupply().call()
-        print("Total supply {0}".format(totalSupply))
+#         totalSupply = RecycleContract.functions.totalSupply().call()
+#         print("Total supply {0}".format(totalSupply))
 
-        return totalSupply
+#         return totalSupply
 
 def compile_contract(contract_source_files, contractFileName, contractName=None):
     """
@@ -457,7 +558,7 @@ def compile_contract(contract_source_files, contractFileName, contractName=None)
         }
 
     #print("Compiler input {0}".format(compiler_input))
-    compiled_sol = compile_standard(compiler_input) # Compiled source code
+    compiled_sol = compile_standard(compiler_input, allow_paths="/Users/pkj/recycle_demo/node_modules/@openzeppelin/") # Compiled source code
     # print("Compiled bytecode {0}".format(compiled_sol['contracts'][contractFileName][contractName])) # [contractFileName][contractName]['evm']['bytecode']['object']
     bytecode = compiled_sol['contracts'][contractFileName][contractName]['evm']['bytecode']['object']
     abi = json.loads(compiled_sol['contracts'][contractFileName][contractName]['metadata'])['output']['abi']
@@ -493,19 +594,18 @@ def main():
     contract_address = tx_receipt.contractAddress
 
     dummy_app.contract_address = contract_address
-    # dummy_app.add_party("Ambuja", "Processor")
-    # dummy_app.add_party("Reliance", "Processor")
-    # dummy_app.add_party("Saahas", "Collector")
-    # dummy_app.add_party("WVI", "Collector")
-    # dummy_app.add_party("Arun", "Donor")
-    # dummy_app.add_party("Varun", "Donor")
+    # dummy_app.add_party("ambuja@gmail.com", "Processor", "ambuja")
+    # dummy_app.add_party("reliance@gmail.com", "Processor", "reliance")
+    # dummy_app.add_party("saahas@gmail.com", "Collector", "saahas")
+    # dummy_app.add_party("wvi@gmail.com", "Collector", "wvi")
+    # dummy_app.add_party("arun@gmail.com", "Donor", "arun")
+    # dummy_app.add_party("varun@gmail.com", "Donor", "varun")
 
     global application_instance
     application_instance.update({
         "Piyush" : dummy_app
     })
     app.run(host='0.0.0.0', port=port, debug=True)
-
 
 if __name__ == "__main__":
     main()
