@@ -13,6 +13,9 @@ headers = {
     'Accept-Encoding': "gzip, deflate",
 }
 
+response = requests.request("POST", base_url+"/user/create_application", headers=headers,
+	params={"admin_name": "Piyush"})
+log_req_response(response)
 
 payload = json.dumps(
 	{

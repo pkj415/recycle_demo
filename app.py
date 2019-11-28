@@ -9,8 +9,6 @@ from web3 import Web3
 from werkzeug.exceptions import BadRequest
 
 import os
-# from api.endpoints.contract import ns, ps, cs, ds
-# from api.restplus import api
 
 app = Flask(__name__)
 api = Api(app, version="1.0", title="rePurpose Plastic token")
@@ -19,8 +17,6 @@ plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
 transaction = api.namespace('transaction', description='Monitor transactions')
 user = api.namespace('user', description='User management')
 ps = api.namespace('processor', description='Operations available to processor')
-# cs = api.namespace('collector', description='Operations available to collector')
-# ds = api.namespace('donor', description='Operations available to donor')
 
 create_application_instance = reqparse.RequestParser()
 create_application_instance.add_argument('admin_name', required=True, default="Piyush",
@@ -130,6 +126,7 @@ class CreateApplication(Resource):
 
     @api.expect(create_application_instance)
     def post(self):
+        print("------------- Create application -------------")
         global application_instance
         args = create_application_instance.parse_args(request)
         admin_name = args.get('admin_name')
@@ -141,7 +138,9 @@ class CreateApplication(Resource):
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         w3.eth.defaultAccount = w3.eth.accounts[0]
 
-        bytecode, abi = compile_contract(['Recycle.sol', 'ERC223.sol', 'IERC223.sol', 'ERC223Mintable.sol', 'Address.sol', 'SafeMath.sol', 'IERC223Recipient.sol'], 'ERC223Mintable.sol', 'ERC223Mintable')
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
+
+        RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
 
         print("Bytecode {0}".format(bytecode))
         RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
@@ -163,14 +162,6 @@ create_user = api.model('create_user', {
     'email': fields.String(required=True, default="josh@gmail.com", description='Email'),
     'user_type': fields.String(choices=("Processor", "Collector", "Donor"), help='Type of user')
 })
-
-# create_user = reqparse.RequestParser()
-# create_user.add_argument('admin_name', required=True, default="Piyush",
-#     help='Admin name', location='args')
-# create_user.add_argument('type', required=True, default=1,
-#     choices=("Processor", "Collector", "Donor"), help='Select the type of party', location='args')
-# create_user.add_argument('name_of_party', required=True, default=1,
-#     help='Something like Ambuja Cement (a Processor), Saahas (a collector), Rajat (a donor)', location='args')
 
 @user.route('')
 class CreateUser(Resource):
@@ -201,8 +192,6 @@ list_users_request.add_argument('admin_name', required=True, default="Piyush",
 
 @user.route('/list_users')
 class ListParties(Resource):
-
-    # @api.marshal_with(page_of_blog_posts)
     @api.expect(list_users_request)
     def post(self):
         global application_instance
@@ -566,47 +555,9 @@ def compile_contract(contract_source_files, contractFileName, contractName=None)
     abi = json.loads(compiled_sol['contracts'][contractFileName][contractName]['metadata'])['output']['abi']
     return bytecode, abi
 
-# def initialize_app(flask_app):
-    # api.add_namespace(ns)
-    # api.add_namespace(ps)
-    # api.add_namespace(cs)
-    # api.add_namespace(ds)
-    # flask_app.register_blueprint(blueprint)
-    # api.add_resource(HelloWorld, '/')
-
-    #db.init_app(flask_app)
-
-
 def main():
     import sys
     port = int(sys.argv[1])
-    # initialize_app(app)
-    # log.info('>>>>> Starting development server at http://{}/api/ <<<<<'.format(app.config['SERVER_NAME']))
-    dummy_app = Application()
-    w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-    w3.eth.defaultAccount = w3.eth.accounts[0]
-
-    bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
-
-    RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
-
-    tx_hash = RecycleContract.constructor().transact()
-
-    tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
-    contract_address = tx_receipt.contractAddress
-
-    dummy_app.contract_address = contract_address
-    # dummy_app.add_party("ambuja@gmail.com", "Processor", "ambuja")
-    # dummy_app.add_party("reliance@gmail.com", "Processor", "reliance")
-    # dummy_app.add_party("saahas@gmail.com", "Collector", "saahas")
-    # dummy_app.add_party("wvi@gmail.com", "Collector", "wvi")
-    # dummy_app.add_party("arun@gmail.com", "Donor", "arun")
-    # dummy_app.add_party("varun@gmail.com", "Donor", "varun")
-
-    global application_instance
-    application_instance.update({
-        "Piyush" : dummy_app
-    })
     app.run(host='0.0.0.0', port=port, debug=True)
 
 if __name__ == "__main__":
