@@ -558,7 +558,9 @@ def compile_contract(contract_source_files, contractFileName, contractName=None)
         }
 
     #print("Compiler input {0}".format(compiler_input))
-    compiled_sol = compile_standard(compiler_input, allow_paths="/Users/pkj/recycle_demo/node_modules/@openzeppelin/") # Compiled source code
+    # TODO: Fix the allowed paths
+    import os
+    compiled_sol = compile_standard(compiler_input, allow_paths="{0}/node_modules/@openzeppelin/".format(os.getcwd())) # Compiled source code
     # print("Compiled bytecode {0}".format(compiled_sol['contracts'][contractFileName][contractName])) # [contractFileName][contractName]['evm']['bytecode']['object']
     bytecode = compiled_sol['contracts'][contractFileName][contractName]['evm']['bytecode']['object']
     abi = json.loads(compiled_sol['contracts'][contractFileName][contractName]['metadata'])['output']['abi']
