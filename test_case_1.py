@@ -5,7 +5,8 @@ def log_req_response(resp):
 	print(">>> {0}".format(resp.request.url + " " + (resp.request.body or "")))
 	print("<<< {0}".format(resp.text))
 
-base_url = "http://localhost:8000"
+import sys
+base_url = sys.argv[1]
 
 headers = {
     'Content-Type': "application/json",
