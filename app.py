@@ -184,6 +184,16 @@ class CreateUser(Resource):
         app = application_instance[admin_name]
         app.add_party(email, user_type, password)
 
+        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        w3.eth.defaultAccount = app.user_map[email]["address"]
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
+
+        RecycleContract = w3.eth.contract(address=app.contract_address, abi=abi, bytecode=bytecode)
+
+        print("Adding user details {0} and {1} for {2}".format(email, phone, app.user_map[email]["address"]))
+        tx_hash = RecycleContract.functions.insertUserDetails(email, phone).transact()
+        print("Tx hash {0}".format(tx_hash))
+
         resp = Response(
             json.dumps({"public_key": app.user_map[email]["address"]}),
             status=200, mimetype='application/json')
@@ -205,7 +215,6 @@ class ListParties(Resource):
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
-        contract_address = app.contract_address
 
         return app.user_map
 
