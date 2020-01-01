@@ -121,9 +121,10 @@ class Application():
         if self.user_map[party]["type"] != type:
             raise BadRequest("{0} is not a {1}".format(party, type))
 
-@user.route('/create_application')    
+@user.route('/create_application')
 class CreateApplication(Resource):
 
+    @api.doc(description="One time operation")
     @api.expect(create_application_instance)
     def post(self):
         print("------------- Create application -------------")
@@ -165,6 +166,7 @@ create_user = api.model('create_user', {
 
 @user.route('')
 class CreateUser(Resource):
+    @api.doc(description="Create user (Not present if using metamask)")
     @api.expect(create_user)
     def post(self):
         global application_instance
@@ -192,6 +194,7 @@ list_users_request.add_argument('admin_name', required=True, default="Piyush",
 
 @user.route('/list_users')
 class ListParties(Resource):
+    @api.doc(description="Helper function for now (Won't exist in actual)")
     @api.expect(list_users_request)
     def post(self):
         global application_instance
@@ -546,7 +549,7 @@ def compile_contract(contract_source_files, contractFileName, contractName=None)
             "content": f.read()
         }
 
-    #print("Compiler input {0}".format(compiler_input))
+    # print("Compiler input {0}".format(compiler_input))
     # TODO: Fix the allowed paths
     import os
     compiled_sol = compile_standard(compiler_input, allow_paths="{0}/node_modules/@openzeppelin/".format(os.getcwd())) # Compiled source code

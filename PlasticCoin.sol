@@ -1,9 +1,30 @@
 pragma solidity ^0.5.1;
 
 import "node_modules/@openzeppelin/contracts/token/ERC721/ERC721MetadataMintable.sol";
+import "Utils.sol";
 // import 'node_modules/zeppelin-solidity/contracts/token/ERC721/ERC721Full.sol';
 
 contract PlasticCoin is ERC721MetadataMintable {
+    struct User {
+        string email;
+        string phone;
+        bool hasMintingRights;
+    }
+
+    struct IndexValue { uint keyIndex; uint value; }
+    struct KeyFlag { uint key; bool deleted; }
+
+    struct UserDetails {
+        mapping(address => IndexValue) data;
+        KeyFlag[] keys;
+        uint size;
+    }
+
+    UserDetails userDetails;
+
+    // Apply library functions to the data type.
+    using IterableMapping for UserDetails;
+
     address public _minterGranter;
 
     // Mapping from token ID to owner with their shares
@@ -122,5 +143,12 @@ contract PlasticCoin is ERC721MetadataMintable {
             i++;
         }
         return ret;
+    }
+
+    function insertUserDetails(string email, string phone) public {
+        uint256 memory hasMintingRights = false;
+
+        require(userDetails.contains(_msgSender()) == false, "The user details already exist.");
+        userDetails.insert(_msgSender(), User({email: email, phone: phone, hasMintingRights: hasMintingRights}));
     }
 }
