@@ -2,22 +2,11 @@ pragma solidity ^0.5.1;
 
 import "node_modules/@openzeppelin/contracts/token/ERC721/ERC721MetadataMintable.sol";
 import "node_modules/@openzeppelin/upgrades/contracts/upgradeability/BaseAdminUpgradeabilityProxy.sol";
-//import "MinterLib.sol";
-//import "Utils.sol";
-// import 'node_modules/zeppelin-solidity/contracts/token/ERC721/ERC721Full.sol';
 
-// contract PlasticCoin is ERC721MetadataMintable, PlasticCoinStorage {
+contract PlasticCoinV2 is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy {
 
-//     constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() PlasticCoinStorage() public {
-//          plasticCoinStruct.minterGranter = _msgSender();
-//          require(plasticCoinStruct.userDetails.data[address(1)].keyIndex == 0, "Key index is not zero");
-//          // require(true == false, "THERE");
-//         // plasticCoinLibrary = PlasticCoinLibrary(plasticCoinLibraryAddress)
-// //        plasticCoinStruct.initializeContract(_msgSender());
-//     }
-// }
+    address implementation;
 
-contract PlasticCoinStorage {
     struct User {
         string email;
         string phone;
@@ -56,22 +45,12 @@ contract PlasticCoinStorage {
     }
 
     PlasticCoinStruct plasticCoinStruct;
-}
-
-contract PlasticCoinProxy is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy, PlasticCoinStorage {
 
     constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() public {
         plasticCoinStruct.minterGranter = _msgSender();
-    }
- 
-}
-
-contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
-
-    // constructor () public {
-    // }
-    constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() public {
-        plasticCoinStruct.minterGranter = _msgSender();
+        // require(true == false, "THERE");
+        // plasticCoinLibrary = PlasticCoinLibrary(plasticCoinLibraryAddress)
+        //        plasticCoinStruct.initializeContract(_msgSender());
     }
 
     function insertUser(address key, User memory value) internal returns (bool replaced) {
@@ -195,14 +174,32 @@ contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
 
     event addedUser(address user_address);
     function insertUserDetails(string memory email, string memory phone, bool hasMintingRight) public {
-        require(containsUser(_msgSender()) == false, "The user details already exist.");
+        require(containsUser(_msgSender()) == true, "The user details already exist.");
         insertUser(_msgSender(), User({email: email, phone: phone, hasMintingRight: hasMintingRight}));
 
         emit addedUser(_msgSender());
     }
 
     function getUserDetails(address key) public view returns (string memory, string memory, bool hasMintingRight) {
+//        require(contains(userDetails, _msgSender()) == true, "The user details don't exist.");
         return (plasticCoinStruct.userDetails.data[key].value.email, plasticCoinStruct.userDetails.data[key].value.phone, plasticCoinStruct.userDetails.data[key].value.hasMintingRight);
     }
- 
+    // function addMinter(PlasticCoinStruct storage self, address account) internal {
+
+    // }
 }
+
+// contract PlasticCoinProxy is PlasticCoin {
+    
+//     constructor (address implementationAddress) PlasticCoin() public {
+//          implementation = implementationAddress;
+//     }
+
+//     function setImplementation(address newImplementation) public {
+//         implementation = newImplementation;
+//     }
+
+//     function getImplementation() public view returns (address){
+//         return implementation;
+//     }
+// }

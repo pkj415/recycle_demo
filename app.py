@@ -7,11 +7,12 @@ from web3 import Web3
 from werkzeug.exceptions import BadRequest
 
 app = Flask(__name__)
-api = Api(app, version="1.0", title="rePurpose Plastic token")
+api = Api(app, version="1.0", title="rePurpose Plastic token", validate=False)
 
 plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
 transaction = api.namespace('transaction', description='Monitor transactions')
 user = api.namespace('user', description='User management')
+appl = api.namespace('appl', description='Application management')
 ps = api.namespace('processor', description='Operations available to processor')
 
 create_application_instance = reqparse.RequestParser()
@@ -26,10 +27,14 @@ def get_token_id(token_uri):
 class Application():
     def __init__(self):
         self.users = []
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        self.owner_account = w3.eth.accounts[0]
-        self.contract_address = ""
-
+        self.w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        self.owner_account = self.w3.eth.accounts[0]
+        self.contract_address = None
+        self.impl_contract_address = None
+        self.contract = None
+        self.owner_id = None
+        self.proxy_contract_with_bytecode = None
+    
     def create_account(self, password):
         w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
         address = w3.geth.personal.newAccount(password)
@@ -81,19 +86,16 @@ class Application():
         return address
 
     def get_user_map(self):
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin',
-                                         libraries={"PlasticCoin.sol": {
-                                             "PlasticCoinLibrary": self.library_address}}
-                                         )
-
-        RecycleContract = w3.eth.contract(address=self.contract_address, abi=abi, bytecode=bytecode)
-
         user_map = {}
         for user_address in self.users:
-            print("Getting user details for {0}".format(user_address))
-            email, phone, has_minting_right = RecycleContract.functions.getUserDetails(user_address).call()
-            print("Got email and phone {0}, {1}".format(email, phone))
+            # print("Getting user details for {0}".format(user_address))
+            if not self.proxy_contract_with_bytecode:
+                print("Implementation contract not deployed yet!")
+                raise BadRequest("Implementation contract not deployed yet!")
+
+            email, phone, has_minting_right = self.proxy_contract_with_bytecode.functions.getUserDetails(user_address).call()
+            # print("Got email and phone {0}, {1}".format(email, phone))
+            
             user_map[user_address] = {
                 "email": email,
                 "phone": phone,
@@ -103,7 +105,7 @@ class Application():
         print("User map {0}".format(user_map))
         return user_map
 
-@user.route('/create_application')
+@appl.route('/create_application')
 class CreateApplication(Resource):
 
     @api.doc(description="One time operation")
@@ -118,34 +120,101 @@ class CreateApplication(Resource):
         if admin_name in application_instance:
             raise BadRequest("This instance already exists")
 
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = w3.eth.accounts[0]
+        application_instance[admin_name] = Application()
+        app = application_instance[admin_name]
+        app.owner_id = app.w3.eth.accounts[0]
+        app.w3.eth.defaultAccount = app.owner_id
 
-        bytecode_library, abi_library = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoinLibrary')
-        library = w3.eth.contract(abi=abi_library, bytecode=bytecode_library)
-        tx_hash = library.constructor().transact()
-        tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
-        library_address = tx_receipt.contractAddress
+        # bytecode_library, abi_library = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoinLibrary')
+        # library = w3.eth.contract(abi=abi_library, bytecode=bytecode_library)
+        # tx_hash = library.constructor().transact()
+        # tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
+        # library_address = tx_receipt.contractAddress
 
-        print("Created library {0}".format(library_address))
+        # print("Created library {0}".format(library_address))
         # library_address = "0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC";
 
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin', libraries={"PlasticCoin.sol": {
-                            "PlasticCoinLibrary": library_address}})
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoinV1')
 
         # print("Piyush Bytecode {0}".format(bytecode))
-        RecycleContract = w3.eth.contract(abi=abi, bytecode=bytecode)
+        RecycleContract = app.w3.eth.contract(abi=abi, bytecode=bytecode)
 
         tx_hash = RecycleContract.constructor().transact()
 
-        tx_receipt = w3.eth.waitForTransactionReceipt(tx_hash)
+        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
         # print(tx_receipt)
         contract_address = tx_receipt.contractAddress
         print("Created contract address {0}".format(contract_address))
 
-        application_instance[admin_name] = Application()
-        application_instance[admin_name].contract_address = contract_address
-        application_instance[admin_name].library_address = library_address
+        app.contract_address = contract_address
+        app.contract = app.w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+        app.proxy_contract_with_bytecode = app.contract
+
+@appl.route('/<string:admin_name>')
+class GetApplication(Resource):
+    def get(self, admin_name):
+        app = application_instance[admin_name]
+        print("------------- Get Application -------------")
+
+        return Response(
+            json.dumps(
+                {
+                    "contract_address": app.contract_address,
+                    "impl_contract_address": app.impl_contract_address,
+                    "owner_id": app.owner_id
+                }),
+            status=200, mimetype='application/json')
+
+upgrade_contract = api.model('upgrade_contract', {
+    'admin_name': fields.String(required=True, description='Admin name', default="Piyush"),
+    'file_name': fields.String(required=True, description='New contract file name', default="PlasticCoinV2.sol"),
+    'new_contract_name': fields.String(required=True, default="PlasticCoinV2", description='New contract name'),
+})
+
+@appl.route('/upgrade_contract')
+class UpgradeContract(Resource):
+    # @api.expect(upgrade_contract)
+    @api.doc(description="Upgrade your smart contract")
+    @api.expect(upgrade_contract)
+    def post(self):
+        print("------------- Upgrade Contract -------------")
+
+        global application_instance
+
+        admin_name = request.json.get('admin_name')
+        print("Upgrading contract for {0}".format(admin_name))
+
+        file_name = request.json.get('file_name')
+        new_contract_name = request.json.get('new_contract_name')
+
+        if admin_name not in application_instance:
+            raise BadRequest("This instance doesn't exist")
+
+        app = application_instance[admin_name]
+        app.w3.eth.defaultAccount = app.owner_id
+
+        bytecode, abi = compile_contract([file_name], file_name, new_contract_name)
+
+        RecycleContract = app.w3.eth.contract(abi=abi, bytecode=bytecode)
+
+        tx_hash = RecycleContract.constructor().transact()
+        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
+        new_impl_contract_address = tx_receipt.contractAddress
+        print("Created new contract address {0}".format(new_impl_contract_address))
+
+        tx_hash = app.contract.functions.upgradeTo(new_impl_contract_address).transact()
+        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
+        if not tx_receipt.status:
+            print("Failed to upggrade contract")
+            raise BadRequest("Failed to upggrade contract")
+
+        app.impl_contract_address = new_impl_contract_address
+        app.proxy_contract_with_bytecode = app.w3.eth.contract(address=app.contract_address, abi=abi, bytecode=bytecode)
+        resp = Response(
+            json.dumps({"impl_address": new_impl_contract_address}),
+            status=200, mimetype='application/json')
+
+        return resp
 
 create_user = api.model('create_user', {
     'admin_name': fields.String(required=True, description='Admin name', default="Piyush"),
@@ -180,14 +249,8 @@ class CreateUser(Resource):
         # app.add_party(email, user_type, password)
         address = app.create_account(password)
 
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = address
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin',
-                                         libraries={"PlasticCoin.sol": {
-                                             "PlasticCoinLibrary": app.library_address}}
-                                         )
-
-        RecycleContract = w3.eth.contract(address=app.contract_address, abi=abi, bytecode=bytecode)
+        # w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
+        app.w3.eth.defaultAccount = address
 
         print("Adding user details {0} and {1} for {2}".format(email, phone, address))
         if not email:
@@ -196,12 +259,16 @@ class CreateUser(Resource):
         if not phone:
             phone = ""
 
-        tx_hash = RecycleContract.functions.insertUserDetails(email, phone, has_minting_right).transact()
+        if not app.proxy_contract_with_bytecode:
+            print("Implementation contract not deployed yet!")
+            raise BadRequest("Implementation contract not deployed yet!")
+
+        tx_hash = app.proxy_contract_with_bytecode.functions.insertUserDetails(email, phone, has_minting_right).transact()
         print("Tx hash {0}".format(tx_hash))
 
         if has_minting_right:
-            w3.eth.defaultAccount = app.owner_account
-            tx_hash = RecycleContract.functions.addMinter(address).transact()
+            app.w3.eth.defaultAccount = app.owner_account
+            tx_hash = app.proxy_contract_with_bytecode.functions.addMinter(address).transact()
             print("Tx hash {0}".format(tx_hash))
 
         resp = Response(
@@ -219,6 +286,7 @@ class ListParties(Resource):
     @api.doc(description="Helper function for now (Won't exist in actual)")
     @api.expect(list_users_request)
     def post(self):
+        print("------------- List parties -------------")
         global application_instance
         args = list_users_request.parse_args(request)
         admin_name = args.get('admin_name')
@@ -282,22 +350,19 @@ class CreatePlasticCoin(Resource):
         if not user_map[source_address]["has_minting_right"]:
             raise BadRequest("Source doesn't have minting rights")
 
-        contract_address = app.contract_address
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = source_address
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin',
-                                         libraries={"PlasticCoin.sol": {
-                                             "PlasticCoinLibrary": app.library_address}}
-                                         )
         # print("Using contract address {0}".format(contract_address))
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
 
         token_uri['recycler_address'] = source_address
         token_uri = json.dumps(token_uri)
         token_id = get_token_id(token_uri)
 
         print("Token id - {0}".format(token_id))
-        tx_hash = RecycleContract.functions.mintWithTokenURI(destination_address, get_token_id(token_uri), token_uri).transact()
+        app.w3.eth.defaultAccount = source_address
+        if not app.proxy_contract_with_bytecode:
+            print("Implementation contract not deployed yet!")
+            raise BadRequest("Implementation contract not deployed yet!")
+
+        tx_hash = app.proxy_contract_with_bytecode.functions.mintWithTokenURI(destination_address, get_token_id(token_uri), token_uri).transact()
 
         print("Tx hash {0}".format(tx_hash))
         resp = Response(
@@ -330,25 +395,20 @@ class FilterTokens(Resource):
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
-        contract_address = app.contract_address
 
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin',
-                                         libraries={"PlasticCoin.sol": {
-                                             "PlasticCoinLibrary": app.library_address}}
-                                         )
+        if not app.proxy_contract_with_bytecode:
+            print("Implementation contract not deployed yet!")
+            raise BadRequest("Implementation contract not deployed yet!")
 
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
-
-        token_ids = RecycleContract.functions.getOwnerTokens(address).call()
+        token_ids = app.proxy_contract_with_bytecode.functions.getOwnerTokens(address).call()
         print("Token ids - {0}".format(token_ids))
 
         resp = []
         for token_id in token_ids:
-            token_uri = RecycleContract.functions.tokenURI(token_id).call()
+            token_uri = app.proxy_contract_with_bytecode.functions.tokenURI(token_id).call()
             resp.append({
                 "token_uri": json.loads(token_uri),
-                "share": RecycleContract.functions.getTokenShare(token_id, address).call()
+                "share": app.proxy_contract_with_bytecode.functions.getTokenShare(token_id, address).call()
             })
 
         resp_json = json.dumps(resp)
@@ -367,18 +427,14 @@ class GetPlasticCoin(Resource):
         print("Token id {0}".format(token_id))
 
         app = application_instance["Piyush"]
-        contract_address = app.contract_address
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin',
-                                         libraries={"PlasticCoin.sol": {
-                                             "PlasticCoinLibrary": app.library_address}}
-                                         )
 
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+        if not app.proxy_contract_with_bytecode:
+            print("Implementation contract not deployed yet!")
+            raise BadRequest("Implementation contract not deployed yet!")
 
-        owner_addresses = RecycleContract.functions.getTokenOwners(token_id).call()
+        owner_addresses = app.proxy_contract_with_bytecode.functions.getTokenOwners(token_id).call()
         print("Owner addresses - {0}".format(owner_addresses))
-        token_uri = RecycleContract.functions.tokenURI(token_id).call()
+        token_uri = app.proxy_contract_with_bytecode.functions.tokenURI(token_id).call()
 
         resp = {
                 "owners": [
@@ -392,7 +448,7 @@ class GetPlasticCoin(Resource):
                 {
                     "owner_address": owner_address,
                     "email": user_map[owner_address]["email"],
-                    "share": RecycleContract.functions.getTokenShare(token_id, owner_address).call()
+                    "share": app.proxy_contract_with_bytecode.functions.getTokenShare(token_id, owner_address).call()
                 })
 
         resp_json = json.dumps(resp)
@@ -440,20 +496,14 @@ class SendPlasticCoin(Resource):
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
-
-        contract_address = app.contract_address
-
-        w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        w3.eth.defaultAccount = from_address
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin',
-                                         libraries={"PlasticCoin.sol": {
-                                             "PlasticCoinLibrary": app.library_address}}
-                                         )
-
-        RecycleContract = w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
+        app.w3.eth.defaultAccount = from_address
 
         print("Transferring {0} from {1} to {2}".format(share, from_address, to_address))
-        tx_hash = RecycleContract.functions.transferShareFrom(to_address, token_id, int(share)).transact()
+        if not app.proxy_contract_with_bytecode:
+            print("Implementation contract not deployed yet!")
+            raise BadRequest("Implementation contract not deployed yet!")
+
+        tx_hash = app.proxy_contract_with_bytecode.functions.transferShareFrom(to_address, token_id, int(share)).transact()
 
         resp = Response(
             json.dumps({"tx_hash": tx_hash.hex()}),
