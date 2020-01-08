@@ -1,21 +1,7 @@
 pragma solidity ^0.5.1;
 
 import "node_modules/@openzeppelin/contracts/token/ERC721/ERC721MetadataMintable.sol";
-import "node_modules/@openzeppelin/upgrades/contracts/upgradeability/BaseAdminUpgradeabilityProxy.sol";
-//import "MinterLib.sol";
-//import "Utils.sol";
-// import 'node_modules/zeppelin-solidity/contracts/token/ERC721/ERC721Full.sol';
-
-// contract PlasticCoin is ERC721MetadataMintable, PlasticCoinStorage {
-
-//     constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() PlasticCoinStorage() public {
-//          plasticCoinStruct.minterGranter = _msgSender();
-//          require(plasticCoinStruct.userDetails.data[address(1)].keyIndex == 0, "Key index is not zero");
-//          // require(true == false, "THERE");
-//         // plasticCoinLibrary = PlasticCoinLibrary(plasticCoinLibraryAddress)
-// //        plasticCoinStruct.initializeContract(_msgSender());
-//     }
-// }
+import "node_modules/@openzeppelin/upgrades/contracts/upgradeability/AdminUpgradeabilityProxy.sol";
 
 contract PlasticCoinStorage {
     struct User {
@@ -58,19 +44,46 @@ contract PlasticCoinStorage {
     PlasticCoinStruct plasticCoinStruct;
 }
 
-contract PlasticCoinProxy is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy, PlasticCoinStorage {
+contract PlasticCoinProxy is ERC721MetadataMintable, AdminUpgradeabilityProxy, PlasticCoinStorage {
 
-    constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() public {
-        plasticCoinStruct.minterGranter = _msgSender();
+    // TODO: ERC721MetadataMintable has includes a lot of storage. AdminUpgradeabilityProxy has no state variables.
+    // PlasticCoinStorage was created to separate out state from the logic, so that it can be used to maintain the same storage structure at both the proxy and implementation
+    // contracts.
+    // Issue - Since ERC721MetadataMintable is inherited here to have the same storage structure, we are also inheriting methods that might be overwritten in the implementation
+    // contract. This will cause the issue that the transaction call will not be caught by the fallback function. To fix this, we have to manually override to redirect the methods
+    // specified in ERC721MetadataMintable. For now, I have redirected mintWithTokenURI. Redirect all of them. Also check if modifiers need to be redirected.
+
+    constructor (address _logic, address _admin, bytes memory _data) ERC721Metadata("PlasticCoin", "PLC") ERC721() AdminUpgradeabilityProxy(_logic, _admin, _data) public {
+        plasticCoinStruct.minterGranter = msg.sender;
     }
- 
+
+    // TODO: Define events and integrate with the application.
+    // event mintedToken(address to, uint256 tokenId, string tokenURI);
+    // event dummyEvent(uint);
+
+    // TODO: Links with the large TODO at the start of this contract. Find a better method to avoid clumsy overriding of all methods in ERC721MetadataMintable.
+    function mintWithTokenURI(address to, uint256 tokenId, string memory tokenURI) public returns (bool) {
+        _fallback();
+    }
+
+    // Things tested -
+    // 1. Even if mintWithTokenURI above doesn't have the onlyMinter modifier, the modifier in the called function in the implementation will take care of that. So, don't keep any
+    // modifiers in this contract's function at all.
+    //
+    // 2. The modifiers called after a delegate to the implementation's function is done, are those of the implementation itself. This was tested by overriding onlyMinter modifier in this
+    // contract to never fail, but we were still not able to mint tokens using a non-minter account.
+
+    // TODO: Redirect the addMinter function.
+    // function addMinter(address account) public {
+    //     // _fallback();
+    // }
+
 }
 
 contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
-
-    // constructor () public {
-    // }
+    
     constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() public {
+        // We should ideally not require the below line. The storage of the proxy contract should always be used. But removing the below line breaks things. Fix that.
         plasticCoinStruct.minterGranter = _msgSender();
     }
 
@@ -182,7 +195,6 @@ contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
 
     function getOwnerTokens(address owner) public view returns (uint256[] memory) {
         uint256[] memory ret = new uint256[](plasticCoinStruct.ownerTokensCnt[owner]);
-        // address current = tokenIdOwnersList[tokenId][address(0)];
         uint256 current = plasticCoinStruct.ownerTokensList[owner][0];
         uint i = 0;
         while (current != 0) {
@@ -201,7 +213,7 @@ contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
         emit addedUser(_msgSender());
     }
 
-    function getUserDetails(address key) public view returns (string memory, string memory, bool hasMintingRight) {
+    function getUserDetails(address key) public view returns (string memory, string memory, bool) {
         return (plasticCoinStruct.userDetails.data[key].value.email, plasticCoinStruct.userDetails.data[key].value.phone, plasticCoinStruct.userDetails.data[key].value.hasMintingRight);
     }
  

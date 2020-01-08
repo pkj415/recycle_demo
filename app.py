@@ -93,7 +93,14 @@ class Application():
                 print("Implementation contract not deployed yet!")
                 raise BadRequest("Implementation contract not deployed yet!")
 
+            # tx_hash = self.proxy_contract_with_bytecode.functions.getUserDetails(user_address).call()
+            # tx_hash = self.proxy_contract_with_bytecode.functions.getUserDetails(user_address).call()
             email, phone, has_minting_right = self.proxy_contract_with_bytecode.functions.getUserDetails(user_address).call()
+            # print("Tx hash {0}".format(tx_hash))
+            # tx_receipt = self.w3.eth.waitForTransactionReceipt(tx_hash)
+            # print("Tx receipt = {0}".format(tx_receipt))
+            # print("Tx receipt logs = {0}".format(tx_receipt.logs))
+            # print("piyush return value " + x)
             # print("Got email and phone {0}, {1}".format(email, phone))
             
             user_map[user_address] = {
@@ -134,21 +141,40 @@ class CreateApplication(Resource):
         # print("Created library {0}".format(library_address))
         # library_address = "0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC";
 
-        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoinV1')
+        bytecode_impl, abi_impl = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoinV1')
 
-        # print("Piyush Bytecode {0}".format(bytecode))
-        RecycleContract = app.w3.eth.contract(abi=abi, bytecode=bytecode)
+        RecycleContract_impl = app.w3.eth.contract(abi=abi_impl, bytecode=bytecode_impl)
 
-        tx_hash = RecycleContract.constructor().transact()
-
+        tx_hash = RecycleContract_impl.constructor().transact()
         tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
-        # print(tx_receipt)
+        new_impl_contract_address = tx_receipt.contractAddress
+        print("Created Implementation contract address {0}".format(new_impl_contract_address))
+        print("Tx receipt = {0}".format(tx_receipt))
+        print("Tx receipt logs = {0}".format(tx_receipt.logs))
+
+        # tx_hash = app.contract.functions.upgradeTo(new_impl_contract_address).transact()
+        # tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
+        # print("Tx receipt = {0}".format(tx_receipt))
+        # print("Tx receipt logs = {0}".format(tx_receipt.logs))
+        # if not tx_receipt.status:
+        #     print("Failed to upggrade contract")
+        #     raise BadRequest("Failed to upggrade contract")
+
+        app.impl_contract_address = new_impl_contract_address
+
+        bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoinProxy')
+        RecycleContract = app.w3.eth.contract(abi=abi, bytecode=bytecode)
+        tx_hash = RecycleContract.constructor(app.impl_contract_address, app.owner_id, b'').transact()
+        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
         contract_address = tx_receipt.contractAddress
         print("Created contract address {0}".format(contract_address))
+        print("Tx receipt = {0}".format(tx_receipt))
+        print("Tx receipt logs = {0}".format(tx_receipt.logs))
 
         app.contract_address = contract_address
         app.contract = app.w3.eth.contract(address=contract_address, abi=abi, bytecode=bytecode)
-        app.proxy_contract_with_bytecode = app.contract
+        app.proxy_contract_with_bytecode = app.w3.eth.contract(address=app.contract_address, abi=abi_impl, bytecode=bytecode)
+        # app.proxy_contract_with_bytecode = app.contract
 
 @appl.route('/<string:admin_name>')
 class GetApplication(Resource):
@@ -204,6 +230,8 @@ class UpgradeContract(Resource):
 
         tx_hash = app.contract.functions.upgradeTo(new_impl_contract_address).transact()
         tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
+        print("Tx receipt = {0}".format(tx_receipt))
+        print("Tx receipt logs = {0}".format(tx_receipt.logs))
         if not tx_receipt.status:
             print("Failed to upggrade contract")
             raise BadRequest("Failed to upggrade contract")
@@ -265,6 +293,9 @@ class CreateUser(Resource):
 
         tx_hash = app.proxy_contract_with_bytecode.functions.insertUserDetails(email, phone, has_minting_right).transact()
         print("Tx hash {0}".format(tx_hash))
+        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
+        print("Tx receipt = {0}".format(tx_receipt))
+        print("Tx receipt logs = {0}".format(tx_receipt.logs))
 
         if has_minting_right:
             app.w3.eth.defaultAccount = app.owner_account
@@ -295,20 +326,6 @@ class ListParties(Resource):
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
-
-        # w3 = Web3(Web3.HTTPProvider("http://localhost:8545"))
-        # bytecode, abi = compile_contract(['PlasticCoin.sol'], 'PlasticCoin.sol', 'PlasticCoin')
-        #
-        # RecycleContract = w3.eth.contract(address=app.contract_address, abi=abi, bytecode=bytecode)
-        #
-        # import copy
-        # user_map = copy.deepcopy(app.user_map)
-        # for email in app.user_map:
-        #     print("Getting user details for {0}".format(app.user_map[email]["address"]))
-        #     email, phone = RecycleContract.functions.getUserDetails(app.user_map[email]["address"]).call()
-        #     print("Got email and phone {0}, {1}".format(email, phone))
-        #     user_map[email]["email"] = email
-        #     user_map[email]["phone"] = phone
 
         resp = Response(
             json.dumps(app.get_user_map()),
@@ -363,6 +380,9 @@ class CreatePlasticCoin(Resource):
             raise BadRequest("Implementation contract not deployed yet!")
 
         tx_hash = app.proxy_contract_with_bytecode.functions.mintWithTokenURI(destination_address, get_token_id(token_uri), token_uri).transact()
+        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
+        print("Tx receipt = {0}".format(tx_receipt))
+
 
         print("Tx hash {0}".format(tx_hash))
         resp = Response(
