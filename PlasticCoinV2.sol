@@ -1,12 +1,9 @@
 pragma solidity ^0.5.1;
 
 import "node_modules/@openzeppelin/contracts/token/ERC721/ERC721MetadataMintable.sol";
-import "node_modules/@openzeppelin/upgrades/contracts/upgradeability/BaseAdminUpgradeabilityProxy.sol";
+import "node_modules/@openzeppelin/upgrades/contracts/upgradeability/AdminUpgradeabilityProxy.sol";
 
-contract PlasticCoinV2 is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy {
-
-    address implementation;
-
+contract PlasticCoinStorage {
     struct User {
         string email;
         string phone;
@@ -45,12 +42,13 @@ contract PlasticCoinV2 is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy {
     }
 
     PlasticCoinStruct plasticCoinStruct;
+}
 
+contract PlasticCoinV2 is ERC721MetadataMintable, PlasticCoinStorage {
+    
     constructor () ERC721Metadata("PlasticCoin", "PLC") ERC721() public {
+        // We should ideally not require the below line. The storage of the proxy contract should always be used. But removing the below line breaks things. Fix that.
         plasticCoinStruct.minterGranter = _msgSender();
-        // require(true == false, "THERE");
-        // plasticCoinLibrary = PlasticCoinLibrary(plasticCoinLibraryAddress)
-        //        plasticCoinStruct.initializeContract(_msgSender());
     }
 
     function insertUser(address key, User memory value) internal returns (bool replaced) {
@@ -78,7 +76,7 @@ contract PlasticCoinV2 is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy {
     }
 
     function addMinter(address account) public onlyMinterGranter {
-        _addMinter(account);
+        // _addMinter(account);
     }
 
     function renounceMinter(address account) public onlyMinterGranter {
@@ -161,7 +159,6 @@ contract PlasticCoinV2 is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy {
 
     function getOwnerTokens(address owner) public view returns (uint256[] memory) {
         uint256[] memory ret = new uint256[](plasticCoinStruct.ownerTokensCnt[owner]);
-        // address current = tokenIdOwnersList[tokenId][address(0)];
         uint256 current = plasticCoinStruct.ownerTokensList[owner][0];
         uint i = 0;
         while (current != 0) {
@@ -174,32 +171,14 @@ contract PlasticCoinV2 is ERC721MetadataMintable, BaseAdminUpgradeabilityProxy {
 
     event addedUser(address user_address);
     function insertUserDetails(string memory email, string memory phone, bool hasMintingRight) public {
-        require(containsUser(_msgSender()) == true, "The user details already exist.");
+        require(containsUser(_msgSender()) == false, "The user details already exist.");
         insertUser(_msgSender(), User({email: email, phone: phone, hasMintingRight: hasMintingRight}));
 
         emit addedUser(_msgSender());
     }
 
-    function getUserDetails(address key) public view returns (string memory, string memory, bool hasMintingRight) {
-//        require(contains(userDetails, _msgSender()) == true, "The user details don't exist.");
+    function getUserDetails(address key) public view returns (string memory, string memory, bool) {
         return (plasticCoinStruct.userDetails.data[key].value.email, plasticCoinStruct.userDetails.data[key].value.phone, plasticCoinStruct.userDetails.data[key].value.hasMintingRight);
     }
-    // function addMinter(PlasticCoinStruct storage self, address account) internal {
-
-    // }
+ 
 }
-
-// contract PlasticCoinProxy is PlasticCoin {
-    
-//     constructor (address implementationAddress) PlasticCoin() public {
-//          implementation = implementationAddress;
-//     }
-
-//     function setImplementation(address newImplementation) public {
-//         implementation = newImplementation;
-//     }
-
-//     function getImplementation() public view returns (address){
-//         return implementation;
-//     }
-// }

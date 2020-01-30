@@ -415,6 +415,7 @@ class FilterTokens(Resource):
             raise BadRequest("No instance exists for {0}".format(admin_name))
 
         app = application_instance[admin_name]
+        app.w3.eth.defaultAccount = app.owner_id
 
         if not app.proxy_contract_with_bytecode:
             print("Implementation contract not deployed yet!")

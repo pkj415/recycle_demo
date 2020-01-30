@@ -150,3 +150,33 @@ response = requests.request("POST", base_url+"/user/{0}/filter_tokens".format(
 	data=payload,
 	headers=headers)
 log_req_response(response)
+
+assert(response.json()[0]["share"] == 0)
+
+payload = json.dumps(
+	{
+	  "admin_name": "Piyush",
+	  "file_name": "PlasticCoinV2.sol",
+	  "new_contract_name": "PlasticCoinV2"
+	})
+
+response = requests.request("POST", base_url+"/appl/upgrade_contract",
+	data=payload,
+	headers=headers)
+log_req_response(response)
+
+# Filter information for owner
+payload = json.dumps(
+	{
+		"admin_name": "Piyush",
+		"token_filter": {
+		}
+	})
+
+response = requests.request("POST", base_url+"/user/{0}/filter_tokens".format(
+	varun_address),
+	data=payload,
+	headers=headers)
+log_req_response(response)
+
+assert(response.json()[0]["share"] == 5)

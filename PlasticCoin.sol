@@ -78,6 +78,14 @@ contract PlasticCoinProxy is ERC721MetadataMintable, AdminUpgradeabilityProxy, P
     //     // _fallback();
     // }
 
+    // TODO: Override the below function to allow fallback and then delegate even if the call is made by the admin. Make a choice on this later (decide on the user dynamics and then
+    // change this function). Also, note that the super has also been commneted out, which is not a good pratice?
+    function _willFallback() internal {
+        // super._willFallback();
+    }
+
+    // TODO: Allow the implementation contract to override BaseAdminUpgradeabilityProxy to allow voting etc.
+
 }
 
 contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
@@ -112,7 +120,7 @@ contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
     }
 
     function addMinter(address account) public onlyMinterGranter {
-        _addMinter(account);
+        // _addMinter(account);
     }
 
     function renounceMinter(address account) public onlyMinterGranter {
@@ -190,7 +198,7 @@ contract PlasticCoinV1 is ERC721MetadataMintable, PlasticCoinStorage {
     }
 
     function getTokenShare(uint256 tokenId, address owner_address) public view returns (uint) {
-        return plasticCoinStruct.tokenOwnersShares[tokenId][owner_address];
+        return 0;
     }
 
     function getOwnerTokens(address owner) public view returns (uint256[] memory) {
