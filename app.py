@@ -1,9 +1,7 @@
 from flask import Flask, request, Response
 from flask_restplus import Resource, fields, reqparse, Api
-from solc import compile_standard
 import json
 import sha3
-from web3 import Web3
 from werkzeug.exceptions import BadRequest
 
 app = Flask(__name__)
