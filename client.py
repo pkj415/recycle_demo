@@ -1,6 +1,7 @@
 import sys
-sys.path.extend(["/home/pkj/sawtooth-core/sdk/python", "/home/pkj/sawtooth-core/sdk/python/sawtooth_sdk/protobuf"])
+sys.path.extend(["/home/pkj/sawtooth-core/sdk/python", "/home/pkj/sawtooth-core/sdk/python/sawtooth_sdk/protobuf", "/home/pkj/sawtooth-core/signing"])
 
+import json
 import hashlib
 import base64
 from base64 import b64encode
@@ -18,8 +19,6 @@ from sawtooth_sdk.protobuf.transaction_pb2 import Transaction
 from sawtooth_sdk.protobuf.batch_pb2 import BatchList
 from sawtooth_sdk.protobuf.batch_pb2 import BatchHeader
 from sawtooth_sdk.protobuf.batch_pb2 import Batch
-
-from sawtooth_xo.xo_exceptions import XoException
 
 
 def _sha512(data):
@@ -39,14 +38,14 @@ class RecycleHypClient:
             with open(keyfile) as fd:
                 private_key_str = fd.read().strip()
         except OSError as err:
-            raise XoException(
+            raise Exception(
                 'Failed to read private key {}: {}'.format(
                     keyfile, str(err)))
 
         try:
             private_key = Secp256k1PrivateKey.from_hex(private_key_str)
         except ParseError as e:
-            raise XoException(
+            raise Exception(
                 'Unable to load private key: {}'.format(str(e)))
 
         self._signer = CryptoFactory(create_context('secp256k1')) \
@@ -54,10 +53,10 @@ class RecycleHypClient:
 
     def create_coin(self, req_body, auth_user=None, auth_password=None):
         # Serialization is just a json string
-        payload = json.dumps(req_body)
+        payload = json.dumps(req_body).encode("utf-8")
 
         # Construct the address
-        coin_address = self._get_prefix() + _sha512(json.dumps(req_body))[0:64]
+        coin_address = self._get_prefix() + _sha512(json.dumps(req_body).encode("utf-8"))[0:64]
         print("Creating coin {0}".format(coin_address))
 
         header = TransactionHeader(
@@ -158,18 +157,18 @@ class RecycleHypClient:
                 result = requests.get(url, headers=headers)
 
             if result.status_code == 404:
-                raise XoException("No such game")
+                raise Exception("No such game")
 
             elif not result.ok:
-                raise XoException("Error {}: {}".format(
+                raise Exception("Error {}: {}".format(
                     result.status_code, result.reason))
 
         except requests.ConnectionError as err:
-            raise XoException(
+            raise Exception(
                 'Failed to connect to {}: {}'.format(url, str(err)))
 
         except BaseException as err:
-            raise XoException(err)
+            raise Exception(err)
 
         return result.text
 

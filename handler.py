@@ -14,6 +14,7 @@
 # ------------------------------------------------------------------------------
 
 import sys
+import json
 sys.path.extend(["/home/pkj/sawtooth-core/sdk/python", "/home/pkj/sawtooth-core/sdk/python/sawtooth_sdk/protobuf"])
 
 import hashlib
@@ -24,8 +25,12 @@ from sawtooth_sdk.processor.handler import TransactionHandler
 from sawtooth_sdk.processor.exceptions import InvalidTransaction
 from sawtooth_sdk.processor.exceptions import InternalError
 
+from sawtooth_signing.secp256k1 import Secp256k1PrivateKey, Secp256k1PublicKey, Secp256k1Context
+
 LOGGER = logging.getLogger(__name__)
 
+def _sha512(data):
+    return hashlib.sha512(data).hexdigest()
 
 class recyclerHyperledgerTransactionHandler(TransactionHandler):
     def __init__(self, namespace_prefix):
@@ -49,6 +54,8 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
     def apply(self, transaction, context):
         # 1. Deserialize the transaction and verify it is valid
         req_body_str = _unpack_transaction(transaction)
+
+        print('Got req_body_str %s\n', req_body_str)
         req_body = json.loads(req_body_str)
         transaction_signature = req_body["transaction_signature"]
         client_public_key = req_body["client_public_key"]  # Needed as hex
@@ -56,7 +63,8 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         del req_body["transaction_signature"]
 
         # Serialization is just a json string
-        payload = json.dumps(req_body)
+        payload = json.dumps(req_body, sort_keys=True)
+        # print('Got payload %s\n', payload)
 
         public_key = Secp256k1PublicKey.from_hex(client_public_key)
         ctx = Secp256k1Context()
@@ -64,9 +72,10 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             raise InvalidTransaction("Verification of authenticity failed")
 
         if req_body["request_type"] == "create_coin":
-            coin_address = self._get_prefix() + _sha512(req_body_str)[0:64]
+            coin_address = self._get_prefix() + _sha512(req_body_str.encode("utf-8"))[0:64]
 
-        addresses = context.set_state({coin_address: payload})
+        print("Creating coin with address {0}".format(coin_address))
+        addresses = context.set_state({coin_address: payload.encode("utf-8")})
 
         if len(addresses) < 1:
             raise InternalError("State Error")
@@ -79,7 +88,7 @@ def _unpack_transaction(transaction):
     # signer = header.signer_public_key
 
     try:
-        return json.loads(transaction.payload)
+        return transaction.payload.decode("utf-8")
     except ValueError:
         raise InvalidTransaction("Invalid payload serialization")
 
@@ -136,11 +145,6 @@ def _validate_game_data(action, space, signer, board, state, player1, player2):
     elif action == 'delete':
         if board is None:
             raise InvalidTransaction('Invalid action: game does not exist')
-
-
-def _make_xo_address(namespace_prefix, name):
-    return namespace_prefix + \
-        hashlib.sha512(name.encode('utf-8')).hexdigest()[:64]
 
 
 def _get_state_data(context, namespace_prefix, name):
