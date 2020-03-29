@@ -58,6 +58,18 @@ class CreatePlasticCoin(Resource):
 
         return resp
 
+@plastic_coin.route('/<string:coin_address>')
+class GetPlasticCoin(Resource):
+    def get(self, coin_address):
+        print("------------- Get Coin -------------")
+        
+        client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
+        resp_json = client.get_coin()
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
 
 def main():
     import sys
