@@ -1,3 +1,7 @@
+import sys
+sys.path.extend(["/home/pkj/sawtooth-core/sdk/python", "/home/pkj/sawtooth-core/sdk/python/sawtooth_s
+dk/protobuf"])
+
 import hashlib
 import base64
 from base64 import b64encode
