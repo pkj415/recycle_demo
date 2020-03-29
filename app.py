@@ -8,10 +8,10 @@ app = Flask(__name__)
 api = Api(app, version="1.0", title="rePurpose Plastic token", validate=False)
 
 plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
-transaction = api.namespace('transaction', description='Monitor transactions')
-user = api.namespace('user', description='User management')
-appl = api.namespace('appl', description='Application management')
-ps = api.namespace('processor', description='Operations available to processor')
+# transaction = api.namespace('transaction', description='Monitor transactions')
+# user = api.namespace('user', description='User management')
+# appl = api.namespace('appl', description='Application management')
+# ps = api.namespace('processor', description='Operations available to processor')
 
 create_application_instance = reqparse.RequestParser()
 create_application_instance.add_argument('admin_name', required=True, default="Piyush",
@@ -331,18 +331,28 @@ class ListParties(Resource):
         return resp
 
 mint_request = api.model('mint_request', {
-    'admin_name': fields.String(required=True, description='Admin name', default="Piyush"),
-    'source_address': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Minter address'),
-    'destination_address': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Receiver address'),
-    'token_uri': fields.Nested(api.model('token_uri', {
-        'version': fields.Integer(required=True, default=1, description='Version of the URI'),
-        'physical_certificate_url': fields.String(required=True, default="aws/s3/abc", description='URL of physical certificate'),
-        'offset_amount': fields.Float(required=True, default=10.5, description='Weight of plastic offset'),
-        'md5': fields.Float(required=True, default="eb55d2cfc18a41a097b9f188ef738ece", description='MD5 checksum of file.'
-                    'This will help check if the file has been modified later.'),
-        'recycler_address': fields.String(required=False, default="<will_be_auto_filled>", description='Same as minter address'),
-    }))
-})
+    'client_public_key': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Minter address'),
+    'client_nonce': fields.Integer(required=True, default=1, description='Client Nonce'),
+    'offset_amount': fields.Float(required=True, default=10.5, description='Weight of plastic offset'),
+    'pledged_users': fields.Nested(api.model('pledged_users', {
+        'public_key': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='User address'),
+        'share': fields.Integer(required=True, default=1, description='Share of user')
+    })),
+    "request_type": fields.String(required=True, default="create_coin", description='Request type'),
+    'stages': fields.Nested(api.model('stages', [
+        {
+            'name': fields.String(required=True, default="Transport", description='Name of stage'),
+            'documents': fields.Nested(api.model('documents', [
+                {
+                    'location': fields.String(required=True, default="aws/s3", description='Location of document'),
+                    'hash': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='SHA hash of document')
+                }
+            ])),
+        }
+    ])),
+    'version': fields.Integer(required=True, default=1, description='Version of the coin'),
+    'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
+}
 
 @plastic_coin.route('')
 class CreatePlasticCoin(Resource):
@@ -350,39 +360,9 @@ class CreatePlasticCoin(Resource):
     def post(self):
         print("------------- Create Coin -------------")
         print("Params - {0}".format(request.json))
-        global application_instance
-        admin_name = request.json.get('admin_name')
-        source_address = request.json.get('source_address')
-        destination_address = request.json.get('destination_address')
-        token_uri = request.json.get('token_uri')
 
-        if admin_name not in application_instance:
-            raise BadRequest("No instance exists for {0}".format(admin_name))
-
-        app = application_instance[admin_name]
-
-        user_map = app.get_user_map()
-        if not user_map[source_address]["has_minting_right"]:
-            raise BadRequest("Source doesn't have minting rights")
-
-        # print("Using contract address {0}".format(contract_address))
-
-        token_uri['recycler_address'] = source_address
-        token_uri = json.dumps(token_uri)
-        token_id = get_token_id(token_uri)
-
-        print("Token id - {0}".format(token_id))
-        app.w3.eth.defaultAccount = source_address
-        if not app.proxy_contract_with_bytecode:
-            print("Implementation contract not deployed yet!")
-            raise BadRequest("Implementation contract not deployed yet!")
-
-        tx_hash = app.proxy_contract_with_bytecode.functions.mintWithTokenURI(destination_address, get_token_id(token_uri), token_uri).transact()
-        tx_receipt = app.w3.eth.waitForTransactionReceipt(tx_hash)
-        print("Tx receipt = {0}".format(tx_receipt))
-
-
-        print("Tx hash {0}".format(tx_hash))
+        client = RecycleHypClient(base_url)
+        client.create_coin(request.json)
         resp = Response(
             json.dumps({"token_id": hex(token_id)}),
             status=200, mimetype='application/json')
