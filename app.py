@@ -8,10 +8,10 @@ app = Flask(__name__)
 api = Api(app, version="1.0", title="rePurpose Plastic token", validate=False)
 
 plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
-# transaction = api.namespace('transaction', description='Monitor transactions')
-# user = api.namespace('user', description='User management')
-# appl = api.namespace('appl', description='Application management')
-# ps = api.namespace('processor', description='Operations available to processor')
+transaction = api.namespace('transaction', description='Monitor transactions')
+user = api.namespace('user', description='User management')
+appl = api.namespace('appl', description='Application management')
+ps = api.namespace('processor', description='Operations available to processor')
 
 create_application_instance = reqparse.RequestParser()
 create_application_instance.add_argument('admin_name', required=True, default="Piyush",
@@ -352,7 +352,7 @@ mint_request = api.model('mint_request', {
     ])),
     'version': fields.Integer(required=True, default=1, description='Version of the coin'),
     'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
-}
+})
 
 @plastic_coin.route('')
 class CreatePlasticCoin(Resource):

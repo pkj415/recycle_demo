@@ -52,7 +52,7 @@ class RecycleHypClient:
         self._signer = CryptoFactory(create_context('secp256k1')) \
             .new_signer(private_key)
 
-    def create(self, req_body, auth_user=None, auth_password=None):
+    def create_coin(self, req_body, auth_user=None, auth_password=None):
         # Serialization is just a json string
         payload = json.dumps(req_body)
 
