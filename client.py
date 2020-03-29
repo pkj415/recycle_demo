@@ -1,6 +1,5 @@
 import sys
-sys.path.extend(["/home/pkj/sawtooth-core/sdk/python", "/home/pkj/sawtooth-core/sdk/python/sawtooth_s
-dk/protobuf"])
+sys.path.extend(["/home/pkj/sawtooth-core/sdk/python", "/home/pkj/sawtooth-core/sdk/python/sawtooth_sdk/protobuf"])
 
 import hashlib
 import base64

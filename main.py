@@ -27,14 +27,7 @@ from sawtooth_sdk.processor.log import log_configuration
 from sawtooth_sdk.processor.config import get_log_config
 from sawtooth_sdk.processor.config import get_log_dir
 from sawtooth_sdk.processor.config import get_config_dir
-from sawtooth_xo.processor.handler import XoTransactionHandler
-from sawtooth_xo.processor.config.xo import XOConfig
-from sawtooth_xo.processor.config.xo import \
-    load_default_xo_config
-from sawtooth_xo.processor.config.xo import \
-    load_toml_xo_config
-from sawtooth_xo.processor.config.xo import \
-    merge_xo_config
+from handler import recyclerHyperledgerTransactionHandler
 
 
 DISTRIBUTION_NAME = 'sawtooth-xo'
@@ -68,30 +61,13 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def load_xo_config(first_config):
-    default_xo_config = \
-        load_default_xo_config()
-    conf_file = os.path.join(get_config_dir(), 'xo.toml')
-
-    toml_config = load_toml_xo_config(conf_file)
-
-    return merge_xo_config(
-        configs=[first_config, toml_config, default_xo_config])
-
-
-def create_xo_config(args):
-    return XOConfig(connect=args.connect)
-
-
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
     opts = parse_args(args)
     processor = None
     try:
-        arg_config = create_xo_config(opts)
-        xo_config = load_xo_config(arg_config)
-        processor = TransactionProcessor(url=xo_config.connect)
+        processor = TransactionProcessor(url='tcp://localhost:4004')
         log_config = get_log_config(filename="xo_log_config.toml")
 
         # If no toml, try loading yaml
@@ -105,13 +81,13 @@ def main(args=None):
             # use the transaction processor zmq identity for filename
             log_configuration(
                 log_dir=log_dir,
-                name="xo-" + str(processor.zmq_id)[2:-1])
+                name="recycleHyperledger-" + str(processor.zmq_id)[2:-1])
 
         init_console_logging(verbose_level=opts.verbose)
         # The prefix should eventually be looked up from the
         # validator's namespace registry.
-        xo_prefix = hashlib.sha512('xo'.encode("utf-8")).hexdigest()[0:6]
-        handler = XoTransactionHandler(namespace_prefix=xo_prefix)
+        xo_prefix = hashlib.sha512('recycleHyperledger'.encode("utf-8")).hexdigest()[0:6]
+        handler = recyclerHyperledgerTransactionHandler(namespace_prefix=xo_prefix)
 
         processor.add_handler(handler)
 
