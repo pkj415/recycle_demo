@@ -56,15 +56,16 @@ class RecycleHypClient:
         payload = json.dumps(req_body).encode("utf-8")
 
         # Construct the address
-        coin_address = self._get_prefix() + _sha512(json.dumps(req_body).encode("utf-8"))[0:64]
+        coin_address = _sha512(json.dumps(req_body).encode("utf-8"))[0:64]
+        absolute_coin_address = self._get_prefix() + coin_address
         print("Creating coin {0}".format(coin_address))
 
         header = TransactionHeader(
             signer_public_key=self._signer.get_public_key().as_hex(),
             family_name="recycleHyperledger",
             family_version="1.0",
-            inputs=[coin_address],
-            outputs=[coin_address],
+            inputs=[absolute_coin_address],
+            outputs=[absolute_coin_address],
             dependencies=[],
             payload_sha512=_sha512(payload),
             batcher_public_key=self._signer.get_public_key().as_hex(),
@@ -103,11 +104,13 @@ class RecycleHypClient:
         #
         #     return response
 
-        return self._send_request(
+        self._send_request(
             "batches", batch_list.SerializeToString(),
             'application/octet-stream',
             auth_user=auth_user,
             auth_password=auth_password)
+
+        return coin_address
 
     def get_coin(self, coin_address, auth_user=None, auth_password=None):
         address = self._get_prefix() + coin_address
