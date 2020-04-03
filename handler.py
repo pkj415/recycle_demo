@@ -55,7 +55,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         # 1. Deserialize the transaction and verify it is valid
         req_body_str = _unpack_transaction(transaction)
 
-        print('Got req_body_str %s\n', req_body_str)
+        print('Got req_body_str {0}\n'.format(req_body_str))
         req_body = json.loads(req_body_str)
         transaction_signature = req_body["transaction_signature"]
         client_public_key = req_body["client_public_key"]  # Needed as hex
@@ -74,19 +74,28 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             raise InvalidTransaction("Verification of authenticity failed")
 
         if request_type == "create_coin":
-            coin_address = self._get_prefix() + _sha512(req_body_str.encode("utf-8"))[0:64]
-            self.create_coin(payload, coin_address, client_public_key, context)
+            self.create_coin(payload, client_public_key, context)
 
-    def create_coin(self, payload, coin_address, client_public_key, context):
-        print("Creating coin with address {0}".format(coin_address))
-        addresses = context.set_state({coin_address: payload.encode("utf-8")})
+    def create_coin(self, payload, client_public_key, context):
+        coin_address = _sha512(payload.encode("utf-8"))[0:64]
+
+        absolute_coin_address = self._get_prefix() + coin_address
+        print("Updating state address for creating using - {0}".format(absolute_coin_address))
+        addresses = context.set_state({absolute_coin_address: payload.encode("utf-8")})
 
         if len(addresses) < 1:
             raise InternalError("State Error")
 
         address = self._get_prefix() + _sha512(client_public_key.encode("utf-8"))[0:64]
-        print("Updating list of coins for user {0}".format(client_public_key))
-        state = json.loads(context.get_state(address))
+        print("Updating state address for list of coins of user - {0}".format(address))
+
+        state = {}
+        try:
+          state = json.loads(context.get_state(address))
+        except:
+          # TODO - Check for address not being set instead of handling all errors.
+          pass
+
         state[coin_address] = json.loads(payload)
 
         addresses = context.set_state({address: json.dumps(state).encode("utf-8")})

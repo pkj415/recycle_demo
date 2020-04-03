@@ -57,14 +57,16 @@ class RecycleHypClient:
         payload = json.dumps(req_body).encode("utf-8")
 
         # Construct the address
-        coin_address = _sha512(json.dumps(req_body).encode("utf-8"))[0:64]
+        del req_body["transaction_signature"]
+        del req_body["request_type"]
+        coin_address = _sha512(json.dumps(req_body, sort_keys=True).encode("utf-8"))[0:64]
         absolute_coin_address = self._get_prefix() + coin_address
-        print("Creating coin {0}".format(coin_address))
+        print("State address for create coin {0}".format(absolute_coin_address))
 
         # TODO - Check if we can directly use the public key instead of takign SHA512
         user_address = _sha512(req_body["client_public_key"].encode("utf-8"))[0:64]
         absolute_user_address = self._get_prefix() + user_address
-        print("Absolute user address {0}".format(absolute_user_address))
+        print("State address for user coin list {0}".format(absolute_user_address))
 
         header = TransactionHeader(
             signer_public_key=self._signer.get_public_key().as_hex(),
@@ -130,24 +132,25 @@ class RecycleHypClient:
         except BaseException:
             raise
 
-    def filter_tokens(self, user_public_key, req_body):
+    def filter_coins(self, user_public_key, req_body):
         address = self._get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
 
         all_coins = self._send_request(
             "state/{}".format(address),
-            auth_user=auth_user,
-            auth_password=auth_password)
+            auth_user=None,
+            auth_password=None)
         try:
             all_coins = base64.b64decode(yaml.safe_load(all_coins)["data"])
         except BaseException:
             raise
 
-        all_coins = json.loads(all_coins)
+        all_coins = json.loads(all_coins.decode('utf-8'))
 
-        filtered_coins = []
+        filtered_coins = {}
 
         for coin_address in all_coins:
-            filtered_coins.append(json.loads(self.get_coin(coin_address)))
+            filtered_coins[coin_address] = \
+              json.loads(self.get_coin(coin_address).decode("utf-8"))
 
         return filtered_coins
 

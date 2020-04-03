@@ -70,7 +70,7 @@ filter_coins_request = api.model('filter_coins_request', {
     }))
 })
 
-@user.route('/<string:user_public_key>/filter_tokens')
+@user.route('/<string:user_public_key>/filter_coins')
 class FilterTokens(Resource):
     @api.expect(filter_coins_request)
     def post(self, user_public_key):
@@ -80,7 +80,7 @@ class FilterTokens(Resource):
 
         # TODO: Implement the token filters
         client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
-        resp = client.filter_tokens(user_public_key, request.json)
+        resp = client.filter_coins(user_public_key, request.json)
         resp_json = json.dumps(resp)
         print("Resp json - {0}".format(resp_json))
 
