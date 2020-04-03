@@ -20,25 +20,13 @@ def _get_keyfile():
     return '{}/{}.priv'.format(key_dir, username)
 
 mint_request = api.model('mint_request', {
-    'client_public_key': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='Minter address'),
+    'client_public_key': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Coin creator\'s address'),
     'client_nonce': fields.Integer(required=True, default=1, description='Client Nonce'),
     'offset_amount': fields.Float(required=True, default=10.5, description='Weight of plastic offset'),
     'pledged_users': fields.List(fields.Nested(api.model('pledged_users', {
-        'public_key': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='User address'),
-	'share': fields.Integer(required=True, default=1, description='Share of user')
-    	}))),
-    "request_type": fields.String(required=True, default="create_coin", description='Request type'),
-    'stages': fields.List(fields.Nested(api.model('stages',
-        {
-            'name': fields.String(required=True, default="Transport", description='Name of stage'),
-            'documents': fields.List(fields.Nested(api.model('documents',
-                {
-                    'location': fields.String(required=True, default="aws/s3", description='Location of document'),
-                    'hash': fields.String(required=True, default="0x1F0a4a146776ECC2a3e52F6700901b51aE528bBC", description='SHA hash of document')
-                }
-            ))),
-        }
-    ))),
+            'public_key': fields.String(required=True, default="034f8240a75dea0e3ce12a48ba34a3bd4702b0a1a1164d124e4880e167ed3f63c3", description='User address'),
+            'share': fields.Integer(required=True, default=1, description='Share of user')
+        }))),
     'version': fields.Integer(required=True, default=1, description='Version of the coin'),
     'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
 })
@@ -68,6 +56,31 @@ class GetPlasticCoin(Resource):
         
         client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
         resp_json = client.get_coin(coin_address)
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
+
+filter_coins_request = api.model('filter_coins_request', {
+    'coins_filter': fields.Nested(api.model('filter', {
+        'version': fields.Integer(required=False, default=1, description='Version of the coin'),
+        'creator': fields.String(required=False, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Address of coin creator')
+    }))
+})
+
+@user.route('/<string:address>/filter_tokens')
+class FilterTokens(Resource):
+    @api.expect(filter_coins_request)
+    def post(self, address):
+        global application_instance
+        print("------------- Filter Coins -------------")
+        print("Params - {0}".format(request.json))
+
+        # TODO: Implement the token filters
+        client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
+        resp = client.filter_tokens(request.json)
+        resp_json = json.dumps(resp)
         print("Resp json - {0}".format(resp_json))
 
         return Response(

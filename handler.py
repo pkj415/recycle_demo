@@ -61,6 +61,8 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         client_public_key = req_body["client_public_key"]  # Needed as hex
 
         del req_body["transaction_signature"]
+        request_type = req_body["request_type"]
+        del req_body["request_type"]
 
         # Serialization is just a json string
         payload = json.dumps(req_body, sort_keys=True)
@@ -71,16 +73,27 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         if not ctx.verify(transaction_signature, payload.encode("utf-8"), public_key):
             raise InvalidTransaction("Verification of authenticity failed")
 
-        if req_body["request_type"] == "create_coin":
+        if request_type == "create_coin":
             coin_address = self._get_prefix() + _sha512(req_body_str.encode("utf-8"))[0:64]
-            self.create_coin(payload, coin_address, context)
+            self.create_coin(payload, coin_address, client_public_key, context)
 
-    def create_coin(self, payload, coin_address, context):
+    def create_coin(self, payload, coin_address, client_public_key, context):
         print("Creating coin with address {0}".format(coin_address))
         addresses = context.set_state({coin_address: payload.encode("utf-8")})
 
         if len(addresses) < 1:
             raise InternalError("State Error")
+
+        address = self._get_prefix() + client_public_key[0:64]
+        print("Updating list of coins for user {0}".format(client_public_key))
+        state = json.loads(context.get_state(address))
+        state[coin_address] = json.loads(payload)
+
+        addresses = context.set_state({address: json.dumps(state).encode("utf-8")})
+
+        if len(addresses) < 1:
+            raise InternalError("State Error")
+
 
 def _unpack_transaction(transaction):
     header = transaction.header

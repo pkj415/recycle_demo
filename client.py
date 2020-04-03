@@ -53,6 +53,7 @@ class RecycleHypClient:
 
     def create_coin(self, req_body, auth_user=None, auth_password=None):
         # Serialization is just a json string
+        req_body["request_type"] = "create_coin"
         payload = json.dumps(req_body).encode("utf-8")
 
         # Construct the address
@@ -122,15 +123,31 @@ class RecycleHypClient:
         try:
             return base64.b64decode(yaml.safe_load(result)["data"])
         except BaseException:
-            return None
+            raise
+
+    def filter_tokens(self, user_address, req_body):
+        address = self._get_prefix() + user_address[0:64]
+
+        all_coins = self._send_request(
+            "state/{}".format(address),
+            auth_user=auth_user,
+            auth_password=auth_password)
+        try:
+            all_coins = base64.b64decode(yaml.safe_load(all_coins)["data"])
+        except BaseException:
+            raise
+
+        all_coins = json.loads(all_coins)
+
+        filtered_coins = []
+
+        for coin_address in all_coins:
+            filtered_coins.append(json.loads(self.get_coin(coin_address)))
+
+        return filtered_coins
 
     def _get_prefix(self):
         return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
-
-    def _get_address(self, coin_sha):
-        xo_prefix = self._get_prefix()
-        game_address = coin_sha.encode('utf-8')[0:64]
-        return xo_prefix + game_address
 
     def _send_request(self,
                       suffix,
