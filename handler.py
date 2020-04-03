@@ -57,24 +57,63 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
 
         print('Got req_body_str {0}\n'.format(req_body_str))
         req_body = json.loads(req_body_str)
-        transaction_signature = req_body["transaction_signature"]
-        client_public_key = req_body["client_public_key"]  # Needed as hex
 
-        del req_body["transaction_signature"]
         request_type = req_body["request_type"]
         del req_body["request_type"]
 
-        # Serialization is just a json string
-        payload = json.dumps(req_body, sort_keys=True)
-        # print('Got payload %s\n', payload)
-
-        public_key = Secp256k1PublicKey.from_hex(client_public_key)
-        ctx = Secp256k1Context()
-        if not ctx.verify(transaction_signature, payload.encode("utf-8"), public_key):
-            raise InvalidTransaction("Verification of authenticity failed")
-
         if request_type == "create_coin":
+            transaction_signature = req_body["transaction_signature"]
+            client_public_key = req_body["client_public_key"]  # Needed as hex
+
+            del req_body["transaction_signature"]
+
+            # Serialization is just a json string
+            payload = json.dumps(req_body, sort_keys=True)
+
+            public_key = Secp256k1PublicKey.from_hex(client_public_key)
+            ctx = Secp256k1Context()
+            if not ctx.verify(transaction_signature, payload.encode("utf-8"), public_key):
+                raise InvalidTransaction("Verification of authenticity failed")
+
             self.create_coin(payload, client_public_key, context)
+
+        elif request_type == "add_stages":
+            coin_address = req_body["coin_address"]
+            del req_body["coin_address"]
+
+            transaction_signature = req_body["transaction_signature"]
+            del req_body["transaction_signature"]
+
+            absolute_coin_address = self._get_prefix() + coin_address
+            coin_state = json.loads(context.get_state(absolute_coin_address))
+
+            client_public_key = coin_state["client_public_key"]
+            payload = json.dumps(req_body, sort_keys=True)
+
+            public_key = Secp256k1PublicKey.from_hex(client_public_key)
+            ctx = Secp256k1Context()
+            if not ctx.verify(transaction_signature, payload.encode("utf-8"), public_key):
+                raise InvalidTransaction("Verification of authenticity failed")
+
+            # TODO - Handle CAS errors
+            for stage in req_body["stages"]:
+                stage_name = stage["name"]
+                del stage["name"]
+                coin_state[stage_name] = stage
+
+            context.set_state({absolute_coin_address: coin_state})
+
+    def get_coin(self, coin_address):
+        address = self._get_prefix() + coin_address
+
+        result = self._send_request(
+            "state/{}".format(address),
+            auth_user=None,
+            auth_password=None)
+        try:
+            return base64.b64decode(yaml.safe_load(result)["data"])
+        except BaseException:
+            raise
 
     def create_coin(self, payload, client_public_key, context):
         coin_address = _sha512(payload.encode("utf-8"))[0:64]

@@ -24,10 +24,6 @@ mint_request = api.model('mint_request', {
     'client_public_key': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Coin creator\'s address'),
     'client_nonce': fields.Integer(required=True, default=1, description='Client Nonce'),
     'offset_amount': fields.Float(required=True, default=10.5, description='Weight of plastic offset'),
-    'pledged_users': fields.List(fields.Nested(api.model('pledged_users', {
-            'public_key': fields.String(required=True, default="034f8240a75dea0e3ce12a48ba34a3bd4702b0a1a1164d124e4880e167ed3f63c3", description='User address'),
-            'share': fields.Integer(required=True, default=1, description='Share of user')
-        }))),
     'version': fields.Integer(required=True, default=1, description='Version of the coin'),
     'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
 })
@@ -82,6 +78,34 @@ class FilterTokens(Resource):
         client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
         resp = client.filter_coins(user_public_key, request.json)
         resp_json = json.dumps(resp)
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
+
+add_stages_request = api.model('add_stages', {
+    'stages': fields.List(fields.Nested(api.model(
+        {
+            'name': fields.String(required=True, default="Delivered", description='Name of stage'),
+            'can_update': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Coin creator\'s address'),
+        }
+    ))),
+    'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
+})
+
+@plastic_coin.route('/<string:plastic_coin_address>/add_stages')
+class AddStages(Resource):
+    @api.expect(filter_coins_request)
+    def post(self, plastic_coin_address):
+        global application_instance
+        print("------------- Add Stages -------------")
+        print("Params - {0}".format(request.json))
+
+        # TODO: Implement the token filters
+        client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
+        resp = client.add_stages(plastic_coin_address, request.json)
+        resp_json = json.dumps({})
         print("Resp json - {0}".format(resp_json))
 
         return Response(

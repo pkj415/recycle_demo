@@ -154,6 +154,45 @@ class RecycleHypClient:
 
         return filtered_coins
 
+    def add_stages(self, coin_address, req_body):
+        # Serialization is just a json string
+        req_body["request_type"] = "add_stages"
+        req_body["coin_address"] = coin_address
+        payload = json.dumps(req_body).encode("utf-8")
+
+        absolute_coin_address = self._get_prefix() + coin_address
+        print("State address for adding stages {0}".format(absolute_coin_address))
+
+        header = TransactionHeader(
+            signer_public_key=self._signer.get_public_key().as_hex(),
+            family_name="recycleHyperledger",
+            family_version="1.0",
+            inputs=[absolute_coin_address],
+            outputs=[absolute_coin_address],
+            dependencies=[],
+            payload_sha512=_sha512(payload),
+            batcher_public_key=self._signer.get_public_key().as_hex(),
+            nonce=time.time().hex().encode()
+        ).SerializeToString()
+
+        signature = self._signer.sign(header)
+
+        transaction = Transaction(
+            header=header,
+            payload=payload,
+            header_signature=signature
+        )
+
+        batch_list = self._create_batch_list([transaction])
+
+        self._send_request(
+            "batches", batch_list.SerializeToString(),
+            'application/octet-stream',
+            auth_user=auth_user,
+            auth_password=auth_password)
+
+        return
+
     def _get_prefix(self):
         return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
 
