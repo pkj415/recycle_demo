@@ -85,10 +85,10 @@ class FilterTokens(Resource):
             status=200, mimetype='application/json')
 
 add_stages_request = api.model('add_stages', {
-    'stages': fields.List(fields.Nested(api.model(
+    'stages': fields.List(fields.Nested(api.model('stages',
         {
-            'name': fields.String(required=True, default="Delivered", description='Name of stage'),
-            'can_update': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Coin creator\'s address'),
+            'name': fields.String(required=True, default="Transport", description='Name of stage'),
+            'can_update': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Address of user with update rights'),
         }
     ))),
     'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
@@ -96,7 +96,7 @@ add_stages_request = api.model('add_stages', {
 
 @plastic_coin.route('/<string:plastic_coin_address>/add_stages')
 class AddStages(Resource):
-    @api.expect(filter_coins_request)
+    @api.expect(add_stages_request)
     def post(self, plastic_coin_address):
         global application_instance
         print("------------- Add Stages -------------")
