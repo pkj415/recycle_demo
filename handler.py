@@ -84,7 +84,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         if len(addresses) < 1:
             raise InternalError("State Error")
 
-        address = self._get_prefix() + client_public_key[0:64]
+        address = self._get_prefix() + _sha512(client_public_key.encode("utf-8"))[0:64]
         print("Updating list of coins for user {0}".format(client_public_key))
         state = json.loads(context.get_state(address))
         state[coin_address] = json.loads(payload)

@@ -125,8 +125,8 @@ class RecycleHypClient:
         except BaseException:
             raise
 
-    def filter_tokens(self, user_address, req_body):
-        address = self._get_prefix() + user_address[0:64]
+    def filter_tokens(self, user_public_key, req_body):
+        address = self._get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
 
         all_coins = self._send_request(
             "state/{}".format(address),
