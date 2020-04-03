@@ -73,13 +73,14 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
 
         if req_body["request_type"] == "create_coin":
             coin_address = self._get_prefix() + _sha512(req_body_str.encode("utf-8"))[0:64]
+            create_coin(payload, coin_address)
 
+    def create_coin(payload, coin_address):
         print("Creating coin with address {0}".format(coin_address))
         addresses = context.set_state({coin_address: payload.encode("utf-8")})
 
         if len(addresses) < 1:
             raise InternalError("State Error")
-
 
 def _unpack_transaction(transaction):
     header = transaction.header

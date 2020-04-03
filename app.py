@@ -52,8 +52,11 @@ class CreatePlasticCoin(Resource):
 
         client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
         coin_address = client.create_coin(request.json)
+
+        resp_json = json.dumps({"coin_address": coin_address})
+        print("Resp json - {0}".format(resp_json))
         resp = Response(
-            json.dumps({"coin_address": coin_address}),
+            resp_json,
             status=200, mimetype='application/json')
 
         return resp
