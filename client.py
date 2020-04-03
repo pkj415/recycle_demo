@@ -61,12 +61,17 @@ class RecycleHypClient:
         absolute_coin_address = self._get_prefix() + coin_address
         print("Creating coin {0}".format(coin_address))
 
+        # TODO - Check if we can directly use the public key instead of takign SHA512
+        user_address = _sha512(req_body["client_public_key"].encode("utf-8"))[0:64]
+        absolute_user_address = self._get_prefix() + user_address
+        print("Absolute user address {0}".format(absolute_user_address))
+
         header = TransactionHeader(
             signer_public_key=self._signer.get_public_key().as_hex(),
             family_name="recycleHyperledger",
             family_version="1.0",
-            inputs=[absolute_coin_address],
-            outputs=[absolute_coin_address],
+            inputs=[absolute_coin_address, absolute_user_address],
+            outputs=[absolute_coin_address, absolute_user_address],
             dependencies=[],
             payload_sha512=_sha512(payload),
             batcher_public_key=self._signer.get_public_key().as_hex(),
