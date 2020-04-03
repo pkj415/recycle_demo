@@ -188,8 +188,8 @@ class RecycleHypClient:
         self._send_request(
             "batches", batch_list.SerializeToString(),
             'application/octet-stream',
-            auth_user=auth_user,
-            auth_password=auth_password)
+            auth_user=None,
+            auth_password=None)
 
         return
 

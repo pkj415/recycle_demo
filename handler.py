@@ -85,7 +85,9 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             del req_body["transaction_signature"]
 
             absolute_coin_address = self._get_prefix() + coin_address
-            coin_state = json.loads(context.get_state(absolute_coin_address))
+            print("Piyush getting coin state for {0}".format(absolute_coin_address))
+            coin_state = json.loads(
+              context.get_state([absolute_coin_address])[0].data.decode("utf-8"))
 
             client_public_key = coin_state["client_public_key"]
             payload = json.dumps(req_body, sort_keys=True)
@@ -99,9 +101,12 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             for stage in req_body["stages"]:
                 stage_name = stage["name"]
                 del stage["name"]
-                coin_state[stage_name] = stage
 
-            context.set_state({absolute_coin_address: coin_state})
+                if "stages" not in coin_state:
+                  coin_state["stages"] = {}
+                coin_state["stages"][stage_name] = stage
+
+            context.set_state({absolute_coin_address: json.dumps(coin_state).encode("utf-8")})
 
     def get_coin(self, coin_address):
         address = self._get_prefix() + coin_address
