@@ -112,6 +112,36 @@ class AddStages(Resource):
             resp_json,
             status=200, mimetype='application/json')
 
+update_stage_request = api.model('update_stage', {
+    'name': fields.String(required=True, default="Transport", description='Name of stage'),
+    'documents': fields.List(fields.Nested(api.model('documents',
+        {
+            'location': fields.String(required=True, default="aws/abc.pdf", description='Location of document'),
+            'hash': fields.String(required=True, default="dd004d63bab571b5045e2ff52a82dd89", description='MD5 hash of document')
+        }
+    ))),
+    'can_update': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Address of user with update rights'),
+    'transaction_signature': fields.String(required=True, default="", description='Signature of payload')
+})
+
+@plastic_coin.route('/<string:plastic_coin_address>/update_stage')
+class UpdateStage(Resource):
+    @api.expect(add_stages_request)
+    def post(self, plastic_coin_address):
+        global application_instance
+        print("------------- Add Stages -------------")
+        print("Params - {0}".format(request.json))
+
+        # TODO: Implement the token filters
+        client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
+        resp = client.update_stage(plastic_coin_address, request.json)
+        resp_json = json.dumps({})
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
+
 def main():
     import sys
     port = int(sys.argv[1])
