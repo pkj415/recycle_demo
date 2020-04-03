@@ -10,6 +10,7 @@ import os
 app = Flask(__name__)
 api = Api(app, version="1.0", title="rePurpose Plastic token", validate=False)
 
+user = api.namespace('user', description='User level APIs')
 plastic_coin = api.namespace('plastic_coin', description='Plastic coin entity')
 
 def _get_keyfile():
