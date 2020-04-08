@@ -39,6 +39,9 @@ base_url = 'http://127.0.0.1:8008'
 def _sha512(data):
     return hashlib.sha512(data).hexdigest()
 
+def _get_prefix(self):
+    return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
+
 transaction_request = api.model('transaction_request', {
     'client_key': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='User key\'s file name'),
     'payload': fields.Raw()
@@ -178,8 +181,19 @@ class GetPlasticCoin(Resource):
     def get(self, coin_address):
         print("------------- Get Coin -------------")
       
-        client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
-        resp_json = client.get_coin(coin_address)
+        address = self._get_prefix() + coin_address
+
+        result = self._send_request(
+            "state/{}".format(address),
+            auth_user=auth_user,
+            auth_password=auth_password)
+
+        resp_json = None
+        try:
+            resp_json = base64.b64decode(yaml.safe_load(result)["data"])
+        except BaseException:
+            raise
+
         print("Resp json - {0}".format(resp_json))
 
         return Response(

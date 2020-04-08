@@ -132,12 +132,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
 
         elif request_type == "update_stage":
             coin_address = req_body["coin_address"]
-            del req_body["coin_address"]
-
-            transaction_signature = req_body["transaction_signature"]
-            del req_body["transaction_signature"]
-
-            stage_name = req_body["name"]
+            stage_name = req_body["stage_name"]
 
             absolute_coin_address = self._get_prefix() + coin_address
             coin_state = json.loads(
@@ -145,21 +140,14 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
 
             user_with_update_rights = coin_state["stages"][stage_name]["can_update"]
 
-            # TODO - If no user is specified with update rights, skip verification.
-            payload = json.dumps(req_body, sort_keys=True)
-
-            public_key = Secp256k1PublicKey.from_hex(user_with_update_rights)
-            ctx = Secp256k1Context()
-            if not ctx.verify(transaction_signature, payload.encode("utf-8"), public_key):
-                raise InvalidTransaction("Verification of authenticity failed")
-
-            del req_body["name"]
+            if user_with_update_rights != transaction.header.signer_public_key:
+                raise InvalidTransaction("Don't have rights to update stage {0} of coin {1}".format(
+                    stage_name, coin_address))
 
             # TODO - Handle CAS errors - Parallel/Sequential executors? Dependency between transactions? Batches?
-            coin_state["stages"][stage_name] = req_body
+            coin_state["stages"][stage_name] = req_body["body"]
 
-            context.set_state({absolute_coin_address: json.dumps(coin_state).encode("utf-8")})
-
+            context.set_state({absolute_coin_address: json.dumps(coin_state, sort_keys=True).encode("utf-8")})
 
     def get_coin(self, coin_address):
         address = self._get_prefix() + coin_address
@@ -172,22 +160,3 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             return base64.b64decode(yaml.safe_load(result)["data"])
         except BaseException:
             raise
-
-
-def _unpack_transaction(transaction):
-    header = transaction.header
-
-    # The transaction signer is the player
-    # signer = header.signer_public_key
-
-    try:
-        return transaction.payload.decode("utf-8")
-    except ValueError:
-        raise InvalidTransaction("Invalid payload serialization")
-
-    # _validate_transaction(name, action, space)
-
-    # if action == 'take':
-    #     space = int(space)
-    #
-    # return name, action, space, signer
