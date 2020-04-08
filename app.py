@@ -20,7 +20,7 @@ import yaml
 from sawtooth_signing import create_context
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing import ParseError
-from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
+from sawtooth_signing.secp256k1 import Secp256k1PrivateKey, Secp256k1PublicKey, Secp256k1Context
 
 from sawtooth_sdk.protobuf.transaction_pb2 import TransactionHeader
 from sawtooth_sdk.protobuf.transaction_pb2 import Transaction
@@ -35,21 +35,17 @@ transact = api.namespace('transact', description='User level APIs')
 
 base_url = 'http://127.0.0.1:8008'
 
-def _get_keyfile():
-    username = getpass.getuser()
-    home = os.path.expanduser("~")
-    key_dir = os.path.join(home, ".sawtooth", "keys")
-
-    return '{}/{}.priv'.format(key_dir, username)
+def _sha512(data):
+    return hashlib.sha512(data).hexdigest()
 
 transaction_request = api.model('transaction_request', {
     'client_key': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='User key\'s file name'),
-    'payload': api.model('transaction_request')
+    'payload': fields.Raw()
 })
 
 @transact.route('')
 class Transact(Resource):
-    @api.expect(mint_request)
+    @api.expect(transaction_request)
     def post(self):
         print("------------- Transact -------------")
         print("Params - {0}".format(request.json))
@@ -73,6 +69,7 @@ class Transact(Resource):
         try:
             with open(keyfile) as fd:
                 public_key_str = fd.read().strip()
+                public_key = Secp256k1PublicKey.from_hex(public_key_str)
         except OSError as err:
             raise Exception(
                 'Failed to read private key {}: {}'.format(
@@ -85,21 +82,23 @@ class Transact(Resource):
                 'Unable to load private key: {}'.format(str(e)))
 
         ctx = Secp256k1Context()
-        payload_str = json.dumps(request.json["payload"], sort_key=True).encode("utf-8")
+        payload_str = json.dumps(request.json["payload"], sort_keys=True).encode("utf-8")
 
         header = TransactionHeader(
             signer_public_key=public_key_str,
             family_name="recycleHyperledger",
             family_version="1.0",
-            # inputs=[absolute_coin_address, absolute_user_address],
-            # outputs=[absolute_coin_address, absolute_user_address],
+            inputs=[],
+            outputs=[],
             dependencies=[],
             payload_sha512=_sha512(payload_str),
             batcher_public_key=public_key_str,
             nonce=time.time().hex().encode()
         ).SerializeToString()
 
-        signature = ctx.sign(payload_str, private_key)
+        signature = ctx.sign(header, private_key)
+        print("Signature of payload {0} {1}".format(signature,
+          ctx.verify(signature, payload_str, public_key)))
 
         transaction = Transaction(
             header=header,
@@ -113,6 +112,8 @@ class Transact(Resource):
         ).SerializeToString()
 
         signature = ctx.sign(header, private_key)
+        print("Signature of batch header {0} {1}".format(signature,
+          ctx.verify(signature, header, public_key)))
 
         batch = Batch(
             header=header,
@@ -123,8 +124,8 @@ class Transact(Resource):
         return self._send_request(
             "batches", batch_list.SerializeToString(),
             'application/octet-stream',
-            auth_user=auth_user,
-            auth_password=auth_password)
+            auth_user=None,
+            auth_password=None)
 
     def _send_request(self,
                       suffix,
