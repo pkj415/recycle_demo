@@ -182,6 +182,13 @@ class Transact(Resource):
             auth_user=None,
             auth_password=None)
 
+        if request.json["payload"]["request_type"] == "create_coin":
+            resp = json.loads(resp_json)
+
+            coin_address = _sha512(transaction.header)[0:64]
+            resp["coin_address"] = coin_address
+            resp_json = json.dumps(resp)
+
         return Response(
             resp_json,
             status=200, mimetype='application/json')
