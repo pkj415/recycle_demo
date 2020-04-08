@@ -84,6 +84,13 @@ def _send_request(suffix,
     except BaseException as err:
         raise Exception(err)
 
+    if suffix == "batches":
+      result_json = json.loads(result.text)
+      result = {
+          "batch_id": result_json["link"][result_json["link"].find('id=') + 3:]
+      }
+      return json.dumps(result)
+
     return result.text
 
 transaction_request = api.model('transaction_request', {
@@ -169,12 +176,15 @@ class Transact(Resource):
             header_signature=signature)
         batch_list = BatchList(batches=[batch])
 
-        return _send_request(
+        resp_json = _send_request(
             "batches", batch_list.SerializeToString(),
             'application/octet-stream',
             auth_user=None,
             auth_password=None)
 
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
 
 def get_coin(coin_address):
     address = _get_prefix() + coin_address
