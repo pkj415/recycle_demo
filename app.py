@@ -32,7 +32,8 @@ app = Flask(__name__)
 api = Api(app, version="1.0", title="rePurpose Impact Verification", validate=False)
 
 transact = api.namespace('transact', description='Transaction APIs')
-plastic_coin= api.namespace('plastic_coin', description='Coin read APIs')
+plastic_coin = api.namespace('plastic_coin', description='Coin read APIs')
+user = api.namespace('user', description='User read APIs')
 
 base_url = 'http://127.0.0.1:8008'
 
@@ -175,24 +176,26 @@ class Transact(Resource):
             auth_password=None)
 
 
+def get_coin(coin_address):
+    address = _get_prefix() + coin_address
 
+    result = _send_request(
+        "state/{}".format(address),
+        auth_user=None,
+        auth_password=None)
+
+    resp_json = None
+    try:
+        resp_json = base64.b64decode(yaml.safe_load(result)["data"]).decode("utf-8")
+    except BaseException:
+          raise
+    return resp_json
+   
 @plastic_coin.route('/<string:coin_address>')
 class GetPlasticCoin(Resource):
     def get(self, coin_address):
         print("------------- Get Coin -------------")
-      
-        address = _get_prefix() + coin_address
-
-        result = _send_request(
-            "state/{}".format(address),
-            auth_user=None,
-            auth_password=None)
-
-        resp_json = None
-        try:
-            resp_json = base64.b64decode(yaml.safe_load(result)["data"])
-        except BaseException:
-            raise
+        resp_json = get_coin(coin_address)
 
         print("Resp json - {0}".format(resp_json))
 
@@ -200,30 +203,45 @@ class GetPlasticCoin(Resource):
             resp_json,
             status=200, mimetype='application/json')
 
-# filter_coins_request = api.model('filter_coins_request', {
-#     'coins_filter': fields.Nested(api.model('filter', {
-#         'version': fields.Integer(required=False, default=1, description='Version of the coin'),
-#         'creator': fields.String(required=False, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Address of coin creator')
-#     }))
-# })
+filter_coins_request = api.model('filter_coins_request', {
+    'coins_filter': fields.Nested(api.model('filter', {
+        'version': fields.Integer(required=False, default=1, description='Version of the coin'),
+        'creator': fields.String(required=False, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='Address of coin creator')
+    }))
+})
 
-# @user.route('/<string:user_public_key>/filter_coins')
-# class FilterTokens(Resource):
-#     @api.expect(filter_coins_request)
-#     def post(self, user_public_key):
-#         global application_instance
-#         print("------------- Filter Coins -------------")
-#         print("Params - {0}".format(request.json))
+@user.route('/<string:user_public_key>/filter_coins')
+class FilterTokens(Resource):
+    @api.expect(filter_coins_request)
+    def post(self, user_public_key):
+        global application_instance
+        print("------------- Filter Coins -------------")
+        print("Params - {0}".format(request.json))
 
-#         # TODO: Implement the token filters
-#         client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
-#         resp = client.filter_coins(user_public_key, request.json)
-#         resp_json = json.dumps(resp)
-#         print("Resp json - {0}".format(resp_json))
+        address = _get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
 
-#         return Response(
-#             resp_json,
-#             status=200, mimetype='application/json')
+        all_coins = _send_request(
+            "state/{}".format(address),
+            auth_user=None,
+            auth_password=None)
+        try:
+            all_coins = base64.b64decode(yaml.safe_load(all_coins)["data"])
+        except BaseException:
+            raise
+
+        all_coins = json.loads(all_coins.decode('utf-8'))["coins"]
+
+        filtered_coins = {}
+
+        for coin_address in all_coins:
+            filtered_coins[coin_address] = json.loads(get_coin(coin_address))
+
+        resp_json = json.dumps(filtered_coins)
+        print("Resp json - {0}".format(resp_json))
+
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
 
 # add_stages_request = api.model('add_stages', {
 #     'stages': fields.List(fields.Nested(api.model('stages',

@@ -57,7 +57,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
     def _get_prefix(self):
         return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
 
-    def add_coin_to_user_list(self, coin_address, user_public_key):
+    def add_coin_to_user_list(self, coin_address, user_public_key, context):
         address = self._get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
         print("Adding coin {0} to user {1}'s list".format(coin_address, user_public_key))
 
@@ -77,7 +77,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         if len(addresses) < 1:
             raise InternalError("State Error")
 
-    def remove_coin_from_user_list(self, coin_address, user_public_key):
+    def remove_coin_from_user_list(self, coin_address, user_public_key, context):
         address = self._get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
         print("Removing coin {0} from user {1}'s list".format(coin_address, user_public_key))
 
@@ -124,15 +124,18 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             if len(addresses) < 1:
                 raise InternalError("State Error")
 
-            self.add_coin_to_user_list(coin_address, transaction.header.signer_public_key)
+            self.add_coin_to_user_list(coin_address, transaction.header.signer_public_key, context)
 
         elif request_type == "add_stages":
             coin_address = payload["coin_address"]
 
             absolute_coin_address = self._get_prefix() + coin_address
 
-            coin_state = json.loads(
-              context.get_state([absolute_coin_address])[0].data.decode("utf-8"))
+            fetched_state = context.get_state([absolute_coin_address])
+            if not fetched_state:
+              raise InvalidTransaction("Invalid coin address")
+
+            coin_state = json.loads(fetched_state[0].data.decode("utf-8"))
 
             creator_public_key = coin_state["creator_public_key"]
             if creator_public_key != transaction.header.signer_public_key:
@@ -193,14 +196,14 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             coin_state["shares"][transaction.header.signer_public_key] -= share
             if coin_state["shares"][transaction.header.signer_public_key] == 0:
                 del coin_state["shares"][transaction.header.signer_public_key]
-                self.remove_coin_from_user_list(coin_address, from_public_key)
+                self.remove_coin_from_user_list(coin_address, from_public_key, context)
 
             if to_public_key not in coin_state["shares"]:
                 coin_state["shares"][to_public_key] = 0
-                self.add_coin_to_user_list(coin_address, to_public_key)
+                self.add_coin_to_user_list(coin_address, to_public_key, context)
 
             coin_state["shares"][to_public_key] += share
-
+            context.set_state({absolute_coin_address: json.dumps(coin_state, sort_keys=True).encode("utf-8")})
 
 
 
