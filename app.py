@@ -31,7 +31,8 @@ from sawtooth_sdk.protobuf.batch_pb2 import Batch
 app = Flask(__name__)
 api = Api(app, version="1.0", title="rePurpose Impact Verification", validate=False)
 
-transact = api.namespace('transact', description='User level APIs')
+transact = api.namespace('transact', description='Transaction APIs')
+plastic_coin= api.namespace('plastic_coin', description='Coin read APIs')
 
 base_url = 'http://127.0.0.1:8008'
 
@@ -172,18 +173,18 @@ class Transact(Resource):
         return result.text
 
 
-# @plastic_coin.route('/<string:coin_address>')
-# class GetPlasticCoin(Resource):
-#     def get(self, coin_address):
-#         print("------------- Get Coin -------------")
-        
-#         client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
-#         resp_json = client.get_coin(coin_address)
-#         print("Resp json - {0}".format(resp_json))
+@plastic_coin.route('/<string:coin_address>')
+class GetPlasticCoin(Resource):
+    def get(self, coin_address):
+        print("------------- Get Coin -------------")
+      
+        client = RecycleHypClient(base_url='http://127.0.0.1:8008', keyfile=_get_keyfile())
+        resp_json = client.get_coin(coin_address)
+        print("Resp json - {0}".format(resp_json))
 
-#         return Response(
-#             resp_json,
-#             status=200, mimetype='application/json')
+        return Response(
+            resp_json,
+            status=200, mimetype='application/json')
 
 # filter_coins_request = api.model('filter_coins_request', {
 #     'coins_filter': fields.Nested(api.model('filter', {
