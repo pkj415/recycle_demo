@@ -58,30 +58,48 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
 
     def apply(self, transaction, context):
-        # 1. Deserialize the transaction and verify it is valid
-        req_body_str = _unpack_transaction(transaction)
+        print('Got transaction {0}\n'.format(transaction))
 
-        print('Got req_body_str {0}\n'.format(req_body_str))
-        req_body = json.loads(req_body_str)
+        payload_str = None
+        try:
+            payload_str = transaction.payload.decode("utf-8")
+        except ValueError:
+            raise InvalidTransaction("Invalid payload serialization")
 
-        request_type = req_body["request_type"]
-        del req_body["request_type"]
+        payload = json.loads(payload_str)
+
+        request_type = payload["request_type"]
 
         if request_type == "create_coin":
-            transaction_signature = req_body["transaction_signature"]
-            client_public_key = req_body["client_public_key"]  # Needed as hex
+            coin_address = _sha512(transaction.header.SerializeToString()).encode("utf-8")[0:64]
 
-            del req_body["transaction_signature"]
+            absolute_coin_address = self._get_prefix() + coin_address
+            print("Updating state address for creating using - {0}".format(absolute_coin_address))
 
-            # Serialization is just a json string
-            payload = json.dumps(req_body, sort_keys=True)
+            addresses = context.set_state(
+                {
+                    absolute_coin_address: json.dumps(payload.get("body", {}), sort_keys=True).encode("utf-8")
+                })
 
-            public_key = Secp256k1PublicKey.from_hex(client_public_key)
-            ctx = Secp256k1Context()
-            if not ctx.verify(transaction_signature, payload.encode("utf-8"), public_key):
-                raise InvalidTransaction("Verification of authenticity failed")
+            if len(addresses) < 1:
+                raise InternalError("State Error")
 
-            self.create_coin(payload, client_public_key, context)
+            address = self._get_prefix() + _sha512(transaction.header.signer_public_key.encode("utf-8"))[0:64]
+            print("Updating state address for list of coins of user - {0}".format(address))
+
+            state = {}
+            try:
+              state = json.loads(context.get_state(address))
+            except:
+              # TODO - Check for address not being set instead of handling all errors.
+              pass
+
+            state[coin_address] = payload.get("body", {})
+
+            addresses = context.set_state({address: json.dumps(state).encode("utf-8")})
+
+            if len(addresses) < 1:
+                raise InternalError("State Error")
 
         elif request_type == "add_stages":
             coin_address = req_body["coin_address"]
@@ -156,33 +174,6 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             return base64.b64decode(yaml.safe_load(result)["data"])
         except BaseException:
             raise
-
-    def create_coin(self, payload, client_public_key, context):
-        coin_address = _sha512(payload.encode("utf-8"))[0:64]
-
-        absolute_coin_address = self._get_prefix() + coin_address
-        print("Updating state address for creating using - {0}".format(absolute_coin_address))
-        addresses = context.set_state({absolute_coin_address: payload.encode("utf-8")})
-
-        if len(addresses) < 1:
-            raise InternalError("State Error")
-
-        address = self._get_prefix() + _sha512(client_public_key.encode("utf-8"))[0:64]
-        print("Updating state address for list of coins of user - {0}".format(address))
-
-        state = {}
-        try:
-          state = json.loads(context.get_state(address))
-        except:
-          # TODO - Check for address not being set instead of handling all errors.
-          pass
-
-        state[coin_address] = json.loads(payload)
-
-        addresses = context.set_state({address: json.dumps(state).encode("utf-8")})
-
-        if len(addresses) < 1:
-            raise InternalError("State Error")
 
 
 def _unpack_transaction(transaction):
