@@ -262,6 +262,7 @@ class RecycleHypClient:
             else:
                 result = requests.get(url, headers=headers)
 
+            print("<< {0} {1}".format(result.status_code, result.json()))
             if result.status_code == 404:
                 raise Exception("No such game")
 
