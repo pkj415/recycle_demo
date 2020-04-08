@@ -39,8 +39,51 @@ base_url = 'http://127.0.0.1:8008'
 def _sha512(data):
     return hashlib.sha512(data).hexdigest()
 
-def _get_prefix(self):
+def _get_prefix():
     return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
+
+def _send_request(suffix,
+                  data=None,
+                  content_type=None,
+                  auth_user=None,
+                  auth_password=None):
+    if base_url.startswith("http://"):
+        url = "{}/{}".format(base_url, suffix)
+    else:
+        url = "http://{}/{}".format(base_url, suffix)
+
+    headers = {}
+    if auth_user is not None:
+        auth_string = "{}:{}".format(auth_user, auth_password)
+        b64_string = b64encode(auth_string.encode()).decode()
+        auth_header = 'Basic {}'.format(b64_string)
+        headers['Authorization'] = auth_header
+
+    if content_type is not None:
+        headers['Content-Type'] = content_type
+
+    try:
+        if data is not None:
+            result = requests.post(url, headers=headers, data=data)
+        else:
+            result = requests.get(url, headers=headers)
+
+        print("<< {0} {1}".format(result.status_code, result.json()))
+        if result.status_code == 404:
+            raise Exception("No such game")
+
+        elif not result.ok:
+            raise Exception("Error {}: {}".format(
+                result.status_code, result.reason))
+
+    except requests.ConnectionError as err:
+        raise Exception(
+            'Failed to connect to {}: {}'.format(url, str(err)))
+
+    except BaseException as err:
+        raise Exception(err)
+
+    return result.text
 
 transaction_request = api.model('transaction_request', {
     'client_key': fields.String(required=True, default="0370a1a847e878e98aa044ca7bf9374e944f78c750a450b9dc40b7b13c95dce30f", description='User key\'s file name'),
@@ -125,55 +168,12 @@ class Transact(Resource):
             header_signature=signature)
         batch_list = BatchList(batches=[batch])
 
-        return self._send_request(
+        return _send_request(
             "batches", batch_list.SerializeToString(),
             'application/octet-stream',
             auth_user=None,
             auth_password=None)
 
-    def _send_request(self,
-                      suffix,
-                      data=None,
-                      content_type=None,
-                      auth_user=None,
-                      auth_password=None):
-        if base_url.startswith("http://"):
-            url = "{}/{}".format(base_url, suffix)
-        else:
-            url = "http://{}/{}".format(base_url, suffix)
-
-        headers = {}
-        if auth_user is not None:
-            auth_string = "{}:{}".format(auth_user, auth_password)
-            b64_string = b64encode(auth_string.encode()).decode()
-            auth_header = 'Basic {}'.format(b64_string)
-            headers['Authorization'] = auth_header
-
-        if content_type is not None:
-            headers['Content-Type'] = content_type
-
-        try:
-            if data is not None:
-                result = requests.post(url, headers=headers, data=data)
-            else:
-                result = requests.get(url, headers=headers)
-
-            print("<< {0} {1}".format(result.status_code, result.json()))
-            if result.status_code == 404:
-                raise Exception("No such game")
-
-            elif not result.ok:
-                raise Exception("Error {}: {}".format(
-                    result.status_code, result.reason))
-
-        except requests.ConnectionError as err:
-            raise Exception(
-                'Failed to connect to {}: {}'.format(url, str(err)))
-
-        except BaseException as err:
-            raise Exception(err)
-
-        return result.text
 
 
 @plastic_coin.route('/<string:coin_address>')
@@ -181,12 +181,12 @@ class GetPlasticCoin(Resource):
     def get(self, coin_address):
         print("------------- Get Coin -------------")
       
-        address = self._get_prefix() + coin_address
+        address = _get_prefix() + coin_address
 
-        result = self._send_request(
+        result = _send_request(
             "state/{}".format(address),
-            auth_user=auth_user,
-            auth_password=auth_password)
+            auth_user=None,
+            auth_password=None)
 
         resp_json = None
         try:

@@ -74,7 +74,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             coin_address = _sha512(transaction.header.SerializeToString())[0:64]
 
             absolute_coin_address = self._get_prefix() + coin_address
-            print("Updating state address for creating using - {0}".format(absolute_coin_address))
+            print("Creating coin at address - {0} {1}".format(coin_address, absolute_coin_address))
 
             addresses = context.set_state(
                 {
@@ -131,8 +131,8 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
                 })
 
         elif request_type == "update_stage":
-            coin_address = req_body["coin_address"]
-            stage_name = req_body["stage_name"]
+            coin_address = payload["coin_address"]
+            stage_name = payload["stage_name"]
 
             absolute_coin_address = self._get_prefix() + coin_address
             coin_state = json.loads(
@@ -145,7 +145,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
                     stage_name, coin_address))
 
             # TODO - Handle CAS errors - Parallel/Sequential executors? Dependency between transactions? Batches?
-            coin_state["stages"][stage_name] = req_body["body"]
+            coin_state["stages"][stage_name] = payload["body"]
 
             context.set_state({absolute_coin_address: json.dumps(coin_state, sort_keys=True).encode("utf-8")})
 
