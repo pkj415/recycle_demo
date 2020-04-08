@@ -71,7 +71,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
         request_type = payload["request_type"]
 
         if request_type == "create_coin":
-            coin_address = _sha512(transaction.header.SerializeToString()).encode("utf-8")[0:64]
+            coin_address = _sha512(transaction.header.SerializeToString())[0:64]
 
             absolute_coin_address = self._get_prefix() + coin_address
             print("Updating state address for creating using - {0}".format(absolute_coin_address))
