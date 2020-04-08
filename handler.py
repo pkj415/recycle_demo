@@ -57,6 +57,46 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
     def _get_prefix(self):
         return _sha512('recycleHyperledger'.encode('utf-8'))[0:6]
 
+    def add_coin_to_user_list(self, coin_address, user_public_key):
+        address = self._get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
+        print("Adding coin {0} to user {1}'s list".format(coin_address, user_public_key))
+
+        state = {}
+        try:
+          state = json.loads(context.get_state(address))
+        except:
+          # TODO - Check for address not being set instead of handling all errors.
+          state = {"coins": {}}
+
+        if coin_address in state["coins"]:
+            return
+
+        state["coins"][coin_address] = {}
+        addresses = context.set_state({address: json.dumps(state).encode("utf-8")})
+
+        if len(addresses) < 1:
+            raise InternalError("State Error")
+
+    def remove_coin_from_user_list(self, coin_address, user_public_key):
+        address = self._get_prefix() + _sha512(user_public_key.encode("utf-8"))[0:64]
+        print("Removing coin {0} from user {1}'s list".format(coin_address, user_public_key))
+
+        state = {}
+        try:
+          state = json.loads(context.get_state(address))
+        except:
+          # TODO - Check for address not being set instead of handling all errors.
+          state = {"coins": {}}
+
+        if coin_address not in state["coins"]:
+            return
+
+        del state["coins"][coin_address]
+        addresses = context.set_state({address: json.dumps(state).encode("utf-8")})
+
+        if len(addresses) < 1:
+            raise InternalError("State Error")
+
     def apply(self, transaction, context):
         print('Got transaction {0}\n'.format(transaction))
 
@@ -84,22 +124,7 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
             if len(addresses) < 1:
                 raise InternalError("State Error")
 
-            address = self._get_prefix() + _sha512(transaction.header.signer_public_key.encode("utf-8"))[0:64]
-            print("Updating state address for list of coins of user - {0}".format(address))
-
-            state = {}
-            try:
-              state = json.loads(context.get_state(address))
-            except:
-              # TODO - Check for address not being set instead of handling all errors.
-              pass
-
-            state[coin_address] = payload.get("body", {})
-
-            addresses = context.set_state({address: json.dumps(state).encode("utf-8")})
-
-            if len(addresses) < 1:
-                raise InternalError("State Error")
+            self.add_coin_to_user_list(coin_address, transaction.header.signer_public_key)
 
         elif request_type == "add_stages":
             coin_address = payload["coin_address"]
@@ -149,14 +174,33 @@ class recyclerHyperledgerTransactionHandler(TransactionHandler):
 
             context.set_state({absolute_coin_address: json.dumps(coin_state, sort_keys=True).encode("utf-8")})
 
-    def get_coin(self, coin_address):
-        address = self._get_prefix() + coin_address
+        elif request_type == "send_coin":
+            coin_address = payload["coin_address"]
+            share = payload["share"]
+            from_public_key = payload["from_public_key"]
+            to_public_key = payload["to_public_key"]
 
-        result = self._send_request(
-            "state/{}".format(address),
-            auth_user=None,
-            auth_password=None)
-        try:
-            return base64.b64decode(yaml.safe_load(result)["data"])
-        except BaseException:
-            raise
+            absolute_coin_address = self._get_prefix() + coin_address
+            coin_state = json.loads(
+              context.get_state([absolute_coin_address])[0].data.decode("utf-8"))
+
+            if from_public_key != transaction.header.signer_public_key:
+                raise InvalidTransaction("Not authorized to transfer coins")
+
+            if coin_state["shares"][transaction.header.signer_public_key] < share:
+                raise InvalidTransaction("Insufficient shares of coin")
+
+            coin_state["shares"][transaction.header.signer_public_key] -= share
+            if coin_state["shares"][transaction.header.signer_public_key] == 0:
+                del coin_state["shares"][transaction.header.signer_public_key]
+                self.remove_coin_from_user_list(coin_address, from_public_key)
+
+            if to_public_key not in coin_state["shares"]:
+                coin_state["shares"][to_public_key] = 0
+                self.add_coin_to_user_list(coin_address, to_public_key)
+
+            coin_state["shares"][to_public_key] += share
+
+
+
+
